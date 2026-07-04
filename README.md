@@ -19,7 +19,7 @@ visuals and guided steps so people new to pentest can get productive fast.
 | **cyberbot agent** | 🧠 | Your personal pentest AI — local Ollama, OpenAI, Anthropic, or any custom endpoint. **Configure it first** — it powers every other platform. |
 | **IceBerg** | 🧊 | OPSEC browser + system opsec + **:: secure** AI find (brightside clearnet / darkside Tor). Custom fingerprints, DoH, proxy, WebRTC leak prevention, canvas/WebGL/audio spoofing, MAC rotation. |
 | **AirBender** | 📶 | Networking toolkit: Merger nmap, masscan, host discovery — functionality agent-driven. |
-| **ShadowDragon** | 🐍 | Kali's interface sqlmap, gobuster, whatweb (web/recon/exploit). - agentic command over system |
+| **ShadowDragon** | 🐍 | Kali's interface: metaploit, sqlmap, gobuster, whatweb (web/recon/exploit). - agentic command over system |
 | **StickEm** | 🔌 | ESP32 Marauder + FT232 + Router merged into one hardware bridge (wireless + serial console + router). |
 | **TrainABaby** | 👶 | Train your own personalized AI model: pick a use case + public dataset + cloud GPU, fine-tune, serve it behind an API key, and plug it back into cyberbot. |
 | **cyberspace** | 🎛️ | The unified dashboard — view/access every tool, or command them all from **one AI**. |
