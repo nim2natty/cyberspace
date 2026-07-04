@@ -1,4 +1,4 @@
-"""IceBerg :: e  -  AI-powered find & browse (brightside + darkside).
+"""IceBerg :: secure  -  AI-powered find & browse (brightside + darkside).
 
 Adapts the open-source Robin OSINT engine (https://github.com/apurvsinghgautam/robin,
 MIT, (c) apurvsinghgautam) into IceBerg. The agent-configured LLM refines a query,

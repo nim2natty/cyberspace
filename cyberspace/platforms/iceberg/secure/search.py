@@ -1,4 +1,4 @@
-"""Search the IceBerg :: e engines (brightside clearnet or darkside onion).
+"""Search the IceBerg :: secure engines (brightside clearnet or darkside onion).
 
 Adapted from Robin's search.py (MIT, apurvsinghgautam): build the query URL for
 each engine, fetch via the right transport (direct for bright, Tor SOCKS5h for
@@ -47,6 +47,28 @@ def _is_onion(url: str) -> bool:
         return False
 
 
+def _resolve_bright_link(href: str) -> str:
+    """Extract the real target URL from a bright-side search result href.
+
+    DuckDuckGo wraps results in redirect URLs:
+        //duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fpage&rut=...
+    SearXNG and plain engines usually link directly. This normalises all of
+    them to a clean https://... URL (or "" if not a result link).
+    """
+    from urllib.parse import urlparse, parse_qs, unquote
+    if not href:
+        return ""
+    # DuckDuckGo redirect: //duckduckgo.com/l/?uddg=<urlencoded target>
+    if "duckduckgo.com/l/" in href:
+        parsed = urlparse("https:" + href if href.startswith("//") else href)
+        uddg = parse_qs(parsed.query).get("uddg", [""])[0]
+        return unquote(uddg) if uddg else ""
+    # Direct http(s) link (SearXNG, plain engines).
+    if href.startswith("http"):
+        return href
+    return ""
+
+
 def fetch_engine(engine: dict, query: str, *, use_tor: bool, socks: str,
                  timeout: int = 40) -> list[dict]:
     """Query one engine and return [{title, link}, ...]."""
@@ -75,11 +97,15 @@ def fetch_engine(engine: dict, query: str, *, use_tor: bool, socks: str,
                 if m and "search" not in m[0] and len(title) > 3:
                     out.append({"title": title[:200], "link": m[0]})
             else:
-                # Bright mode: resolve relative links and take http(s).
-                absu = href if href.startswith("http") else ""
+                # Bright mode: handle DuckDuckGo redirect-wrapped links,
+                # SearXNG direct links, and plain http links.
+                absu = _resolve_bright_link(href)
                 if absu and not _is_onion(absu):
                     host = urlparse(absu).hostname or ""
-                    if host and "search" not in absu and len(title) > 3:
+                    # Skip ad/sponsored results and self-referential links.
+                    if (host and len(title) > 3
+                            and "y.js" not in absu
+                            and "search" not in absu):
                         out.append({"title": title[:200], "link": absu})
         except Exception:
             continue

@@ -1,4 +1,4 @@
-"""Scrape result pages for the IceBerg :: e tool.
+"""Scrape result pages for the IceBerg :: secure tool.
 
 Adapted from Robin's scrape.py (MIT, apurvsinghgautam): fetch each result URL
 through Tor (for .onion) or directly (clearnet), pull the visible text with

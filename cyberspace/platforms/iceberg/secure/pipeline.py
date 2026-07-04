@@ -1,4 +1,4 @@
-"""End-to-end AI find pipeline for IceBerg :: e.
+"""End-to-end AI find pipeline for IceBerg :: secure.
 
 run_find() wires the whole thing together with a progress callback so both the
 CLI and the Streamlit GUI can show each stage:

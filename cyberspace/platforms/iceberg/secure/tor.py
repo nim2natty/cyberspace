@@ -1,4 +1,4 @@
-"""Tor control + health for the IceBerg :: e tool (darkside mode).
+"""Tor control + health for the IceBerg :: secure tool (darkside mode).
 
 Tor speaks SOCKS5 on :9050 (proxy) and a control protocol on :9051. We need:
   - a reachability check (is the SOCKS proxy up?)

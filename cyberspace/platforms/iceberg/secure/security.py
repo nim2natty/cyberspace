@@ -1,4 +1,4 @@
-"""Security configuration for the IceBerg :: e tool.
+"""Security configuration for the IceBerg :: secure tool.
 
 Darkside (Tor) browsing demands a different OPSEC posture than brightside
 (clearnet). This module stores the user's per-mode security settings and applies

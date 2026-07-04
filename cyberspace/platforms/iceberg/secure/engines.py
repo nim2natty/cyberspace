@@ -1,4 +1,4 @@
-"""Search-engine catalogs for the IceBerg :: e tool.
+"""Search-engine catalogs for the IceBerg :: secure tool.
 
 Darkside engines are the curated onion-search list from Robin
 (https://github.com/apurvsinghgautam/robin, MIT). Brightside engines are

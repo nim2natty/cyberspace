@@ -1,12 +1,12 @@
-"""CLI for the IceBerg :: e tool (brightside / darkside AI find & browse).
+"""CLI for the IceBerg :: secure tool (brightside / darkside AI find & browse).
 
-Exposed as:   cyberspace iceberg e <command>
+Exposed as:   cyberspace iceberg secure <command>
 
-  e config   interactive security wizard (set Tor posture before browsing)
-  e find     headless AI find: refine -> search -> filter -> scrape -> summarize
-  e browse   open a URL in the IceBerg browser (Tor-routed for darkside)
-  e gui      launch the Streamlit graphic interface
-  e status   Tor health + saved security config + python dependency check
+  secure config   interactive security wizard (set Tor posture before browsing)
+  secure find     headless AI find: refine -> search -> filter -> scrape -> summarize
+  secure browse   open a URL in the IceBerg browser (Tor-routed for darkside)
+  secure gui      launch the Streamlit graphic interface
+  secure status   Tor health + saved security config + python dependency check
 """
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ def _check_dep(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
-def build_e_cli(console: Console) -> typer.Typer:
-    app = typer.Typer(help="IceBerg :: e - AI-powered find & browse (bright/dark).")
+def build_secure_cli(console: Console) -> typer.Typer:
+    app = typer.Typer(help="IceBerg :: secure - AI-powered find & browse (bright/dark).")
 
     @app.command("status")
     def status():
@@ -61,7 +61,7 @@ def build_e_cli(console: Console) -> typer.Typer:
     def config():
         """Configure the security posture. Set BEFORE darkside browsing."""
         console.print(Panel.fit(
-            "[bold cyan]IceBerg :: e[/bold cyan] - security configuration\n"
+            "[bold cyan]IceBerg :: secure[/bold cyan] - security configuration\n"
             "[dim]Brightside = clearnet. Darkside = Tor + hardening. Pick a preset, "
             "then tune. Dark mode changes transport, DNS, and WebRTC posture.[/dim]",
             border_style="cyan"))
@@ -115,7 +115,7 @@ def build_e_cli(console: Console) -> typer.Typer:
             if not tor_available(sec.tor_socks_host, sec.tor_socks_port):
                 console.print(f"[red]Darkside needs Tor at {sec.socks_url()}, which is not "
                               f"running.[/red] Start it, or use --mode bright. "
-                              f"Run 'cyberspace iceberg e config' first.")
+                              f"Run 'cyberspace iceberg secure config' first.")
                 raise typer.Exit(1)
             if sec.new_identity_per_session:
                 ok, info = new_identity(sec.tor_control_host, sec.tor_control_port,
@@ -165,7 +165,7 @@ def build_e_cli(console: Console) -> typer.Typer:
             raise typer.Exit(1)
         gui_file = Path(__file__).resolve().parent / "gui.py"
         console.print(Panel.fit(
-            f"[bold cyan]IceBerg :: e[/bold cyan] GUI starting at "
+            f"[bold cyan]IceBerg :: secure[/bold cyan] GUI starting at "
             f"http://localhost:{port}\n[dim]Ctrl-C to stop.[/dim]", border_style="cyan"))
         subprocess.run([sys.executable, "-m", "streamlit", "run", str(gui_file),
                         "--server.port", str(port), "--server.headless", "true"])

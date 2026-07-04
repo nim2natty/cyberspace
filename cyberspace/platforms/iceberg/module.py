@@ -45,12 +45,12 @@ def _tool_new_profile(name: str = "auto", persona: str = "win-chrome"):
     return f"created IceBerg profile '{name}' from persona '{persona}'"
 
 
-def _tool_e_find(query: str = "", mode: str = "bright", preset: str = "general"):
-    """Agent-callable: run the IceBerg :: e AI find pipeline (bright/dark)."""
+def _tool_secure_find(query: str = "", mode: str = "bright", preset: str = "general"):
+    """Agent-callable: run the IceBerg :: secure AI find pipeline (bright/dark)."""
     if not query:
-        return "query required (e.g. iceberg.e_find query='ransomware group X', mode='dark')"
-    from .e.pipeline import run_find
-    from .e.security import SecurityConfig
+        return "query required (e.g. iceberg.secure_find query='ransomware group X', mode='dark')"
+    from .secure.pipeline import run_find
+    from .secure.security import SecurityConfig
     sec = SecurityConfig.load()
     if mode in ("bright", "dark"):
         sec.mode = mode
@@ -60,10 +60,10 @@ def _tool_e_find(query: str = "", mode: str = "bright", preset: str = "general")
     return head + (inv.summary or "(no summary)")
 
 
-def _tool_e_status(**_):
-    """Agent-callable: report IceBerg :: e mode + Tor reachability."""
-    from .e.tor import tor_available
-    from .e.security import SecurityConfig, dark_settings
+def _tool_secure_status(**_):
+    """Agent-callable: report IceBerg :: secure mode + Tor reachability."""
+    from .secure.tor import tor_available
+    from .secure.security import SecurityConfig, dark_settings
     sec = SecurityConfig.load()
     up = tor_available(sec.tor_socks_host, sec.tor_socks_port)
     lines = [f"e mode: {sec.mode}", f"Tor SOCKS ({sec.socks_url()}): {'up' if up else 'down'}"]
@@ -102,10 +102,10 @@ class IceBergModule(Module):
                                        "persona": {"type": "string", "default": "win-chrome"}},
                         "required": ["name"]}, fn=_tool_new_profile))
         registry.register(Tool(
-            name="iceberg.e_find",
+            name="iceberg.secure_find",
             description="AI-powered OSINT find: refine a query, search clearnet (bright) or "
                         "Tor onion engines (dark), filter, scrape, and summarize. "
-                        "mode='dark' requires Tor. Use iceberg.e_status first.",
+                        "mode='dark' requires Tor. Use iceberg.secure_status first.",
             parameters={"type": "object",
                         "properties": {"query": {"type": "string"},
                                        "mode": {"type": "string", "enum": ["bright", "dark"],
@@ -115,11 +115,11 @@ class IceBergModule(Module):
                                                            "personal_identity",
                                                            "corporate_espionage"],
                                                   "default": "general"}},
-                        "required": ["query"]}, fn=_tool_e_find))
+                        "required": ["query"]}, fn=_tool_secure_find))
         registry.register(Tool(
-            name="iceberg.e_status",
-            description="Report IceBerg :: e mode and whether the Tor SOCKS proxy is reachable.",
-            parameters={"type": "object", "properties": {}}, fn=_tool_e_status))
+            name="iceberg.secure_status",
+            description="Report IceBerg :: secure mode and whether the Tor SOCKS proxy is reachable.",
+            parameters={"type": "object", "properties": {}}, fn=_tool_secure_status))
 
     def build_cli(self) -> typer.Typer:
         app = typer.Typer(help="IceBerg: OPSEC browser + system opsec.")
@@ -176,9 +176,9 @@ class IceBergModule(Module):
         def check():
             console.print(opsec.selfcheck())
 
-        # IceBerg :: e  - AI-powered find & browse (bright/dark), incl. the GUI.
-        from .e.cli import build_e_cli
-        app.add_typer(build_e_cli(console), name="e")
+        # IceBerg :: secure  - AI-powered find & browse (bright/dark), incl. the GUI.
+        from .secure.cli import build_secure_cli
+        app.add_typer(build_secure_cli(console), name="secure")
 
         return app
 

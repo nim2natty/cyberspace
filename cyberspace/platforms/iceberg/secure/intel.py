@@ -1,4 +1,4 @@
-"""AI intelligence layer for IceBerg :: e (refine -> filter -> summarize).
+"""AI intelligence layer for IceBerg :: secure (refine -> filter -> summarize).
 
 Reuses the SINGLE LLM configured for the whole platform (~/.cyberspace/agent.json)
 via cyberspace's existing provider abstraction - no second LLM config needed.
@@ -30,7 +30,7 @@ FILTER_SYSTEM = """You are an OSINT analyst. Given a search query and a list of 
 Rules:
 1. Drop duplicates, index pages, and unrelated links.
 2. Prefer pages likely to contain substantive content about the query.
-3. Respond ONLY with a JSON array of the kept items, each {"title":..., "link":...}.
+3. Respond ONLY with a JSON array of the kept items, each {{"title":..., "link":...}}.
 4. If none are relevant, respond with "[]".
 
 QUERY: {query}
