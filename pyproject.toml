@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyberspace"
+version = "0.1.0"
+description = "cyberspace - an open-source agentic pentest platform for learners and pros"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "cyberspace contributors" }]
+keywords = ["security", "pentest", "comptia", "kali", "agent", "llm", "oscp"]
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.7",
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+    "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+ui = ["textual>=0.60"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+cyberspace = "cyberspace.cli:app"
+cs = "cyberspace.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/nim2natty/cyberspace"
+Issues = "https://github.com/nim2natty/cyberspace/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cyberspace*"]
+
+[tool.setuptools.package-data]
+"cyberspace.platforms.iceberg" = ["spoof/*.js", "data/*.html"]

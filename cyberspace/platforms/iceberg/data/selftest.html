@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>veil fingerprint self-test</title>
+<style>
+  body{font:14px/1.5 -apple-system,Segoe UI,Roboto,monospace;background:#0d1117;color:#c9d1d9;padding:24px}
+  h1{font-size:18px;color:#58a6ff} table{border-collapse:collapse} td{border-bottom:1px solid #21262d;padding:6px 10px;vertical-align:top}
+  td:first-child{color:#8b949e;width:34%} .ok{color:#3fb950}.warn{color:#d29922}
+</style>
+</head>
+<body>
+<h1>veil :: fingerprint self-test</h1>
+<p>If veil spoofing is active, every value below reflects the <b>synthetic identity</b>,
+not your real machine. If a value matches your real hardware, spoofing failed there.</p>
+<table id="t"></table>
+<script>
+function row(k,v){var t=document.getElementById('t');var r=t.insertRow();
+ r.insertCell().textContent=k; r.insertCell().textContent=v;}
+function fmt(x){try{return JSON.stringify(x)}catch(e){return String(x)}}
+row('userAgent', navigator.userAgent);
+row('appVersion', navigator.appVersion);
+row('platform', navigator.platform);
+row('vendor', navigator.vendor);
+row('language', navigator.language);
+row('languages', fmt(navigator.languages));
+row('hardwareConcurrency', navigator.hardwareConcurrency);
+row('deviceMemory', navigator.deviceMemory);
+row('maxTouchPoints', navigator.maxTouchPoints);
+row('webdriver', navigator.webdriver);
+row('screen', screen.width+'x'+screen.height+' @'+screen.colorDepth+'bit');
+row('availScreen', screen.availWidth+'x'+screen.availHeight);
+row('devicePixelRatio', window.devicePixelRatio);
+row('timezone offset', new Date().getTimezoneOffset());
+row('Intl tz', Intl.DateTimeFormat().resolvedOptions().timeZone);
+row('outerWindow', window.outerWidth+'x'+window.outerHeight);
+if(navigator.userAgentData){
+  navigator.userAgentData.getHighEntropyValues(
+    ['architecture','bitness','platformVersion','model','uaFullVersion','fullVersionList'])
+   .then(function(h){row('UA-CH brands', fmt(navigator.userAgentData.brands));
+     row('UA-CH mobile', navigator.userAgentData.mobile);
+     row('UA-CH platform', navigator.userAgentData.platform);
+     row('UA-CH arch', h.architecture+' '+h.bitness);
+     row('UA-CH platformVer', h.platformVersion);
+     row('UA-CH fullVersion', h.uaFullVersion);});
+}
+// canvas hash
+(function(){var c=document.createElement('canvas');c.width=220;c.height=30;
+ var x=c.getContext('2d');x.textBaseline='top';x.font='14px Arial';
+ x.fillStyle='#f60';x.fillRect(125,1,62,20);x.fillStyle='#069';
+ x.fillText('veil-canvas-'+navigator.hardwareConcurrency,2,15);
+ row('canvas dataURL', c.toDataURL().slice(0,64)+'...');})();
+// webgl
+(function(){try{var c=document.createElement('canvas');var gl=c.getContext('webgl');
+ var d=gl.getExtension('WEBGL_debug_renderer_info');
+ row('WebGL vendor', gl.getParameter(d.UNMASKED_VENDOR_WEBGL));
+ row('WebGL renderer', gl.getParameter(d.UNMASKED_RENDERER_WEBGL));}catch(e){row('WebGL','n/a');}})();
+// webrtc leak probe (should NOT reveal a real IP when proxy_only)
+(function(){row('WebRTC mode','probe below (should be empty / relay only)');
+ try{var pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+  pc.createDataChannel('x');pc.onicecandidate=function(e){
+   if(e.candidate){row('ICE candidate', e.candidate.candidate.split(' ').slice(0,6).join(' '));}};
+  pc.createOffer().then(function(o){return pc.setLocalDescription(o);});}catch(e){row('WebRTC','blocked');}})();
+</script>
+</body>
+</html>
