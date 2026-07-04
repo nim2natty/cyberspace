@@ -1,10 +1,10 @@
 # 🥷 cyberspace
 
-** democratize ai **
+** command a vector in cyberspace, independently **
 
 cyberspace turns any raspbery pi/linux machine into a
 single, friendly command center for practicing penetration testing. Use an API 
-key - or train your own LLM, to create your own **personal AI agent**, with memory.
+key - or use our tool to train your own LLM and create your own **personal AI agent**.
 Everything is driven from one CLI, with visuals and guided steps so people new to 
 the field can get productive fast.
 
