@@ -12,14 +12,15 @@ def main():
 
     loaded = discover_and_load()
     assert loaded, "no modules loaded"
-    expected = {"iceberg", "airbender", "shadowdragon", "stickem"}
+    expected = {"iceberg", "airbender", "shadowdragon", "stickem", "trainababy"}
     missing = expected - set(loaded)
     assert not missing, f"missing platforms: {missing}"
     print(f"PASS  platforms loaded: {sorted(loaded)}")
 
-    # Per-module tool counts. iceberg=5 (browse, opsec_check, new_profile,
-    # e_find, e_status), airbender=3, shadowdragon=13, stickem=6 => 27 total.
-    expected_tools = {"iceberg": 5, "airbender": 3, "shadowdragon": 13, "stickem": 6}
+    # Per-module tool counts. iceberg=5, airbender=3, shadowdragon=13,
+    # stickem=6, trainababy=4 => 31 total.
+    expected_tools = {"iceberg": 5, "airbender": 3, "shadowdragon": 13,
+                      "stickem": 6, "trainababy": 4}
     by_mod = {m: len(TOOL_REGISTRY.by_module(m)) for m in expected}
     for mod, n in expected_tools.items():
         assert by_mod.get(mod, 0) == n, \

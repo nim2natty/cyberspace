@@ -1,0 +1,263 @@
+"""CLI for TrainABaby.
+
+  cyberspace trainababy <command>:
+
+  usecases   browse use-case presets (offensive, defensive, assistant, ...)
+  datasets   browse public training datasets (by use case)
+  gpus       browse GPU hardware + what each can train
+  providers  browse GPU-rental marketplaces
+  instances  search LIVE Vast.ai GPU offers (real prices, no key needed to browse)
+  plan       interactive wizard: usecase -> data -> GPU -> days -> cost estimate
+  train      run the fine-tune job (dry-run with stats, or rent a real GPU)
+  jobs       list training jobs + statistics (loss, samples, $, hours)
+  models     registry of trained models
+  serve      deploy a model behind an OpenAI-compatible endpoint + API key
+  keys       manage API keys for served models
+  use        set a trained+served model as cyberbot's active LLM
+"""
+from __future__ import annotations
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Confirm, Prompt
+from rich.table import Table
+
+from .datasets import all_datasets, datasets_for
+from .gpus import GPUS, best_value_gpu, estimate_cost, gpus_for_model
+from .plan import build_plan
+from .presets import BASE_MODELS, PRESETS, match_preset, preset_for
+from .providers import PROVIDERS
+from .registry import (list_keys, list_models, revoke_key)
+
+
+def build_trainababy_cli(console: Console) -> typer.Typer:
+    app = typer.Typer(help="TrainABaby: train your own personalized AI model.")
+
+    @app.command("usecases")
+    def usecases():
+        """Show use-case presets + their recommended recipe."""
+        t = Table("key", "use case", "base", "method", "datasets")
+        for k, p in PRESETS.items():
+            t.add_row(k, p["label"], p["base"], p["method"], p["datasets"])
+        console.print(t)
+
+    @app.command("datasets")
+    def datasets(use_case: str = typer.Option("general", "-u", "--use-case")):
+        """Show public training datasets for a use case."""
+        for d in datasets_for(use_case):
+            console.print(Panel.fit(
+                f"[bold]{d['name']}[/bold]  [dim]{d['id']}[/dim]\n"
+                f"size: {d['size']}   license: {d['license']}\n{d['note']}",
+                border_style="blue"))
+
+    @app.command("gpus")
+    def gpus():
+        """Show GPU hardware + QLoRA/LoRA capacity."""
+        t = Table("GPU", "VRAM", "QLoRA max", "Full-FT max", "$/hr (low-hi)", "class")
+        for gid, s in GPUS.items():
+            t.add_row(gid, f"{s['vram_gb']}GB", f"{s['qlora_max_b']}B",
+                      f"{s['full_ft_max_b']}B",
+                      f"${s['dph_low']:.2f}-${s['dph_high']:.2f}", s["class"])
+        console.print(t)
+
+    @app.command("providers")
+    def providers():
+        """Show GPU-rental marketplaces."""
+        t = Table("provider", "API base", "live", "note")
+        for k, p in PROVIDERS.items():
+            t.add_row(k, p["api_base"] or "(none)", "yes" if p["live"] else "no", p["note"])
+        console.print(t)
+        console.print("\n[dim]Set keys: export VAST_API_KEY=...  "
+                      "(get one at cloud.vast.ai/account/settings/)[/dim]")
+
+    @app.command("instances")
+    def instances(gpu: str = typer.Option("", "--gpu", "-g", help="e.g. RTX_4090"),
+                  num_gpus: int = typer.Option(1, "--num-gpus", "-n"),
+                  max_dph: float = typer.Option(0.0, "--max-dph", help="max $/hr"),
+                  limit: int = typer.Option(12, "--limit")):
+        """Search LIVE Vast.ai GPU offers (real prices; rent needs a key)."""
+        from .vast import VastClient
+        vc = VastClient()
+        # Map our GPU ids to Vast's gpu_name strings.
+        vast_name = {"RTX_4090": "RTX_4090", "RTX_3090": "RTX_3090", "A100_80": "A100_SXM4_80GB",
+                     "A100_40": "A100_PCIE_40GB", "A6000": "RTX_A6000", "H100": "H100_SXM5_80GB",
+                     "L40S": "L40", "H200": "H200"}.get(gpu.upper()) if gpu else None
+        console.print(f"[dim]searching Vast.ai offers...[/dim]")
+        try:
+            offers = vc.search(gpu_name=vast_name, num_gpus=num_gpus,
+                               max_dph=(max_dph or None), limit=limit)
+        except Exception as e:
+            console.print(f"[red]Vast.ai search failed:[/red] {e}\n"
+                          "[dim]The public offer API may be rate-limited. Try again later.[/dim]")
+            raise typer.Exit(1)
+        if not offers:
+            console.print("[yellow]no offers matched. Try without --gpu to see all.[/yellow]")
+            return
+        t = Table("#", "GPU", "x", "$/hr", "dlperf", "disk GB", "reliability", "location")
+        for o in offers:
+            t.add_row(str(o.id), o.gpu_name, str(o.num_gpus), f"${o.dph_total:.3f}",
+                      f"{o.dlperf:.0f}", f"{o.disk_space:.0f}",
+                      f"{o.reliability:.2f}", o.geolocation)
+        console.print(t)
+        console.print(f"\n[dim]Rent one with: cyberspace trainababy train <name> "
+                      f"--provider vastai --offer {offers[0].id}[/dim]")
+
+    # --- interactive plan wizard -----------------------------------------
+    @app.command("plan")
+    def plan(prompt_text: str = typer.Argument("", help="what you want your AI to do")):
+        """Interactive: pick use case, dataset, model, GPU, days -> cost estimate."""
+        if not prompt_text:
+            prompt_text = Prompt.ask("What do you want your AI to do?",
+                default="offensive pen security")
+        uc = match_preset(prompt_text)
+        preset = preset_for(uc)
+        console.print(f"[green]matched use case:[/green] {preset['label']}  [dim]({uc})[/dim]")
+
+        # base model
+        console.print("\nBase models:")
+        for k, bm in BASE_MODELS.items():
+            mark = " <-- recommended" if k == preset["base"] else ""
+            console.print(f"  {k:<16} {bm['billion']}B params  {bm['note']}{mark}")
+        base = Prompt.ask("Base model", default=preset["base"])
+
+        # dataset
+        ds = datasets_for(preset["datasets"])
+        console.print("\nDatasets:")
+        for i, d in enumerate(ds):
+            console.print(f"  [{i}] {d['name']}  [dim]({d['id']})[/dim]  {d['size']}")
+        di = int(Prompt.ask("Dataset #", default="0", choices=[str(i) for i in range(len(ds))]))
+        dataset_id = ds[di]["id"]
+
+        # GPU (auto-recommend)
+        bparams = BASE_MODELS[base]["billion"]
+        recommended = best_value_gpu(bparams, preset["method"]) or "A100_40"
+        compatible = gpus_for_model(bparams, preset["method"])
+        console.print(f"\nCompatible GPUs: {', '.join(compatible) or 'none - model too big'}")
+        gpu = Prompt.ask("GPU", default=recommended)
+
+        days = int(Prompt.ask("How many days to train?", default="1"))
+        num_gpus = int(Prompt.ask("Number of GPUs", default="1"))
+
+        p = build_plan(uc, base_model=base, dataset_id=dataset_id, gpu=gpu,
+                       days=days, num_gpus=num_gpus)
+        console.print(Panel.fit(
+            f"[bold]{p.name}[/bold]\n"
+            f"base: {p.base_model} ({BASE_MODELS[p.base_model]['billion']}B)   "
+            f"dataset: {p.dataset_id}\n"
+            f"method: {p.method} on {p.num_gpus}x {p.gpu}   epochs: {p.epochs}\n"
+            f"est. time: {p.hours}h   est. cost: ${p.cost_low:.2f}-${p.cost_high:.2f}\n"
+            + ("\n".join("  " + n for n in p.notes)),
+            title="training plan", border_style="cyan"))
+        console.print(f"\n[dim]train it: cyberspace trainababy train {uc} "
+                      f"--base {base} --gpu {gpu} --days {days}[/dim]")
+
+    # --- train -----------------------------------------------------------
+    @app.command("train")
+    def train(use_case: str = typer.Argument(..., help="use-case key (see usecases)"),
+              base: str = typer.Option("", "--base", "-b"),
+              dataset: str = typer.Option("", "--dataset", "-d"),
+              gpu: str = typer.Option("", "--gpu", "-g"),
+              days: int = typer.Option(1, "--days"),
+              num_gpus: int = typer.Option(1, "--num-gpus"),
+              epochs: int = typer.Option(3, "--epochs"),
+              provider: str = typer.Option("dry-run", "--provider", "-p",
+                                          help="dry-run|vastai|local"),
+              offer: int = typer.Option(0, "--offer", help="Vast.ai offer id to rent")):
+        """Run the fine-tune job. Dry-run (simulated stats) by default."""
+        p = build_plan(use_case, base_model=(base or None), dataset_id=(dataset or None),
+                       gpu=(gpu or None), days=days, num_gpus=num_gpus, epochs=epochs)
+        dry = provider == "dry-run"
+        if provider == "vastai" and offer:
+            console.print(f"[yellow]WARNING: will rent Vast.ai offer #{offer} "
+                          f"(~${p.cost_mid:.2f}). Proceed?[/yellow]")
+            if not Confirm.ask("Rent GPU + train?", default=False):
+                raise typer.Exit(0)
+
+        def on_event(stage, msg):
+            console.print(f"[dim]{stage:>8}[/dim]  {msg}")
+        from .train import run_training
+        m = run_training(p, dry_run=dry, vast_offer_id=(offer or None), on_event=on_event)
+        console.print(Panel.fit(
+            f"[green]model:[/green] {m.name}  status: {m.status}\n"
+            f"end_loss: {m.stats.get('end_loss','n/a')}   "
+            f"samples: {m.stats.get('samples_trained','n/a')}   "
+            f"hours: {m.stats.get('hours','n/a')}",
+            border_style="green" if m.status == "trained" else "yellow"))
+        if m.status == "trained":
+            console.print(f"[dim]serve it: cyberspace trainababy serve {m.name}[/dim]")
+
+    # --- jobs + models ---------------------------------------------------
+    @app.command("jobs")
+    def jobs():
+        """List training jobs + their statistics."""
+        models = list_models()
+        if not models:
+            console.print("[dim]no jobs yet. Run: cyberspace trainababy plan[/dim]"); return
+        t = Table("model", "status", "base", "end_loss", "samples", "hours", "$mid")
+        for m in models:
+            s = m.stats
+            t.add_row(m.name, m.status, m.base_model,
+                      str(s.get("end_loss", "-")), str(s.get("samples_trained", "-")),
+                      str(s.get("hours", "-")), str(s.get("cost_mid", "-")))
+        console.print(t)
+
+    @app.command("models")
+    def models():
+        """List trained models in the registry."""
+        ms = list_models()
+        if not ms:
+            console.print("[dim]no models yet.[/dim]"); return
+        t = Table("name", "status", "base", "use_case", "endpoint")
+        for m in ms:
+            t.add_row(m.name, m.status, m.base_model, m.use_case, m.endpoint or "-")
+        console.print(t)
+
+    @app.command("serve")
+    def serve(model_name: str = typer.Argument(...),
+              target: str = typer.Option("ollama", "--target", "-t",
+                                         help="ollama|vastai|groq_lpu"),
+              port: int = typer.Option(11435, "--port")):
+        """Deploy a trained model behind an OpenAI-compatible endpoint + key."""
+        from .serve import serve as do_serve
+        def on_event(stage, msg):
+            console.print(f"[dim]{stage:>8}[/dim]  {msg}")
+        try:
+            m, key = do_serve(model_name, target=target, port=port, on_event=on_event)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]"); raise typer.Exit(1)
+        console.print(Panel.fit(
+            f"[green]served:[/green] {m.name}\n"
+            f"endpoint: {m.endpoint}\n"
+            f"api key:  {key[:24]}...  [dim](full: trainababy keys)[/dim]",
+            border_style="green"))
+        console.print(f"[dim]use it: cyberspace trainababy use {m.name}[/dim]")
+
+    @app.command("keys")
+    def keys():
+        """List/revoke API keys for served models."""
+        ks = list_keys()
+        if not ks:
+            console.print("[dim]no keys issued yet. Serve a model first.[/dim]"); return
+        t = Table("key (prefix)", "model", "endpoint", "created")
+        for k in ks:
+            t.add_row(k.key[:20] + "...", k.model_name, k.endpoint, k.created[:10])
+        console.print(t)
+
+    @app.command("use")
+    def use(model_name: str = typer.Argument(...)):
+        """Set a trained+served model as cyberbot's active LLM."""
+        from .serve import use_as_cyberbot
+        try:
+            endpoint, api_key = use_as_cyberbot(model_name)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]"); raise typer.Exit(1)
+        console.print(Panel.fit(
+            f"[green]cyberbot now uses your trained model.[/green]\n"
+            f"model: {model_name}\nendpoint: {endpoint}\napi_key: {api_key[:16]}...",
+            border_style="green"))
+        console.print("[dim]test it: cyberspace agent[/dim]")
+
+    return app
+
+

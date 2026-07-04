@@ -25,6 +25,7 @@ visuals and guided steps so people new to pentest can get productive fast.
 | **AirBender** | 📶 | Networking toolkit: nmap, masscan, host discovery — agent-driven. |
 | **ShadowDragon** | 🐍 | Everything else: sqlmap, gobuster, whatweb (web/recon/exploit). |
 | **StickEm** | 🔌 | ESP32 Marauder + FT232 merged into one hardware bridge (wireless + serial console). |
+| **TrainABaby** | 👶 | Train your own personalized AI model: pick a use case + public dataset + cloud GPU, fine-tune, serve it behind an API key, and plug it back into cyberbot. |
 | **CyberPunked** | 🎛️ | The unified dashboard — view/access every tool, or command them all from **one AI**. |
 
 ```
@@ -122,6 +123,42 @@ cyberspace iceberg secure gui               # graphic interface at localhost:850
 Presets: `general`, `threat_intel`, `personal_identity`, `corporate_espionage`.
 The agent can call it too: ask cyberbot *"find leaked credentials for ACME on the
 dark web"* and it invokes `iceberg.secure_find` across all your tools.
+
+## 👶 TrainABaby — train your own personalized AI model
+
+TrainABaby closes the loop: **train a custom model → serve it → plug it back into
+cyberbot as its brain.** Describe what you want your AI to do, pick a public
+training dataset + base model + GPU, fine-tune for N days, then deploy it behind an
+OpenAI-compatible API key any agent can use.
+
+```bash
+# browse what's possible
+cyberspace trainababy usecases                      # offensive, defensive, assistant, ...
+cyberspace trainababy datasets -u offensive_pentest  # public HF datasets
+cyberspace trainababy gpus                           # what each GPU can train
+cyberspace trainababy providers                      # Vast.ai, RunPod, Lambda, local
+
+# search LIVE cloud GPU offers (real prices, no key needed to browse)
+cyberspace trainababy instances --gpu RTX_4090
+
+# plan + train
+cyberspace trainababy plan "offensive pen security"  # interactive cost estimate
+cyberspace trainababy train offensive_pentest --base llama3.1-8b --gpu RTX_4090 --days 2
+
+# serve + use
+cyberspace trainababy jobs                           # training statistics (loss, $, hours)
+cyberspace trainababy models                         # trained model registry
+cyberspace trainababy serve llama3.1-8b-offensive_pentest-d2 --target ollama
+cyberspace trainababy keys                           # API keys for served models
+cyberspace trainababy use llama3.1-8b-offensive_pentest-d2   # cyberbot now runs YOUR model
+```
+
+**Model switching** (new in IceBerg): switch the active LLM without re-running setup:
+```bash
+cyberspace iceberg model list                 # current model + what's installed
+cyberspace iceberg model switch qwen2.5-coder:7b
+cyberspace iceberg model provider openai --api-key sk-...
+```
 
 ## 🔌 Step 3: connect your hardware
 

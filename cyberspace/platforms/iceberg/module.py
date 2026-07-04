@@ -66,7 +66,7 @@ def _tool_secure_status(**_):
     from .secure.security import SecurityConfig, dark_settings
     sec = SecurityConfig.load()
     up = tor_available(sec.tor_socks_host, sec.tor_socks_port)
-    lines = [f"e mode: {sec.mode}", f"Tor SOCKS ({sec.socks_url()}): {'up' if up else 'down'}"]
+    lines = [f"secure mode: {sec.mode}", f"Tor SOCKS ({sec.socks_url()}): {'up' if up else 'down'}"]
     if sec.mode == "dark":
         lines += dark_settings(sec)
     return "\n".join(lines)
@@ -175,6 +175,76 @@ class IceBergModule(Module):
         @app.command("check")
         def check():
             console.print(opsec.selfcheck())
+
+        # Switch the active cyberbot LLM model/provider (used by all platforms).
+        model_app = typer.Typer(help="Switch the cyberbot LLM model / provider.")
+        app.add_typer(model_app, name="model")
+
+        @model_app.command("list")
+        def model_list():
+            """Show the current model + available models for the provider."""
+            from ...agent.config import is_configured, load_config
+            from ...config import SUGGESTED_MODELS, DEFAULT_OLLAMA_URL
+            if not is_configured():
+                console.print("[red]Agent not configured.[/red] Run: cyberspace setup")
+                raise typer.Exit(1)
+            cfg = load_config()
+            console.print(f"[bold]current:[/bold] {cfg.provider}/{cfg.model}  "
+                          f"[dim]@ {cfg.base_url}[/dim]\n")
+            t = Table("model", "source")
+            if cfg.provider == "ollama":
+                import httpx
+                try:
+                    names = [m["name"] for m in
+                             httpx.get(f"{cfg.base_url}/api/tags", timeout=3).json().get("models", [])]
+                except Exception:
+                    names = []
+                for n in names:
+                    t.add_row(n, "installed (ollama)")
+            for n in SUGGESTED_MODELS.get(cfg.provider, []):
+                t.add_row(n, "suggested")
+            console.print(t or "[dim]no models known[/dim]")
+
+        @model_app.command("switch")
+        def model_switch(model: str = typer.Argument(..., help="model name to use")):
+            """Switch the active model (keeps provider + base_url + api_key)."""
+            from ...agent.config import is_configured, load_config, save_config
+            if not is_configured():
+                console.print("[red]Agent not configured.[/red] Run: cyberspace setup")
+                raise typer.Exit(1)
+            cfg = load_config()
+            old = cfg.model
+            cfg.model = model
+            save_config(cfg)
+            console.print(f"[green]switched model:[/green] {old} -> [bold]{model}[/bold]\n"
+                          f"[dim]provider {cfg.provider} @ {cfg.base_url} unchanged.[/dim]")
+
+        @model_app.command("provider")
+        def model_provider(provider: str = typer.Argument(...,
+                            help="ollama|openai|anthropic|custom"),
+                           model: str = typer.Option("", "--model"),
+                           base_url: str = typer.Option("", "--base-url"),
+                           api_key: str = typer.Option("", "--api-key")):
+            """Switch provider (and optionally model/url/key) in one step."""
+            from ...agent.config import is_configured, load_config, save_config
+            from ...agent.llm import LLMConfig
+            from ...config import DEFAULT_OLLAMA_URL, SUGGESTED_MODELS
+            existing = load_config() if is_configured() else None
+            provider = provider.lower()
+            if provider not in ("ollama", "openai", "anthropic", "custom"):
+                console.print(f"[red]unknown provider '{provider}'[/red]"); raise typer.Exit(1)
+            cfg = existing or LLMConfig()
+            cfg.provider = provider
+            cfg.base_url = base_url or (DEFAULT_OLLAMA_URL if provider == "ollama"
+                                        else (existing.base_url if existing else ""))
+            if api_key:
+                cfg.api_key = api_key
+            if model:
+                cfg.model = model
+            elif not cfg.model:
+                cfg.model = SUGGESTED_MODELS.get(provider, ["llama3.1:8b"])[0]
+            save_config(cfg)
+            console.print(f"[green]provider set:[/green] {cfg.provider}/{cfg.model}")
 
         # IceBerg :: secure  - AI-powered find & browse (bright/dark), incl. the GUI.
         from .secure.cli import build_secure_cli
