@@ -8,7 +8,7 @@ orchestrates a set of platforms that wrap real offensive-security tooling:
     AirBender     networking toolkit (nmap, masscan, aircrack-ng...)
     ShadowDragon  all other Kali tools (web, exploit, creds, recon, post-exploit)
     StickEm       ESP32 Marauder + FT232 hardware bridge
-    CyberPunked   unified dashboard / one-AI control plane
+    cyberspace   unified dashboard / one-AI control plane
 
 NOTE: this platform is only fully functional when layered over Kali Linux
 (it orchestrates Kali's installed tools). It runs on Kali installs, the Kali
@@ -19,4 +19,4 @@ OSCP study, authorized engagements). Use only against systems you own or are
 explicitly authorized to test.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

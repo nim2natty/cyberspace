@@ -17,10 +17,10 @@ def main():
     assert not missing, f"missing platforms: {missing}"
     print(f"PASS  platforms loaded: {sorted(loaded)}")
 
-    # Per-module tool counts. iceberg=5, airbender=3, shadowdragon=13,
-    # stickem=6, trainababy=4 => 31 total.
-    expected_tools = {"iceberg": 5, "airbender": 3, "shadowdragon": 13,
-                      "stickem": 6, "trainababy": 4}
+    # Per-module tool counts. iceberg=5, airbender=6 (expanded super-tool),
+    # shadowdragon=16 (chain+metasploit), stickem=9 (router), trainababy=4 => 40.
+    expected_tools = {"iceberg": 5, "airbender": 6, "shadowdragon": 16,
+                      "stickem": 9, "trainababy": 4}
     by_mod = {m: len(TOOL_REGISTRY.by_module(m)) for m in expected}
     for mod, n in expected_tools.items():
         assert by_mod.get(mod, 0) == n, \

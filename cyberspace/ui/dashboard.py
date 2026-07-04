@@ -1,11 +1,11 @@
-"""CyberPunked - the unified dashboard / one-AI control plane.
+"""cyberspace dashboard - the unified view / one-AI control plane.
 
 Two modes:
   - Interactive menu: see all modules + their tools, launch any CLI directly.
   - Unified AI: one conversation where the cyberbot agent can call ANY tool
-    across ALL modules (IceBerg + AirBender + ShadowDragon + StickEm).
+    across ALL modules (IceBerg + AirBender + ShadowDragon + StickEm + TrainABaby).
 
-This is `cyberspace dashboard` (a.k.a CyberPunked).
+This is `cyberspace dashboard`.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ console = Console()
 
 def banner() -> None:
     console.print(Panel.fit(
-        "[bold cyan]CYBERPUNKED[/bold cyan] — unified dashboard\n"
+        "[bold cyan]cyberspace[/bold cyan] - unified dashboard\n"
         "[dim]All platforms in one place. Drive any tool directly, or chat with one "
         "AI that commands every platform.[/dim]",
         border_style="cyan",
@@ -52,7 +52,7 @@ def interactive() -> None:
     discover_and_load()
     banner()
     while True:
-        console.print("\n[bold]CyberPunked menu[/bold]")
+        console.print("\n[bold]cyberspace menu[/bold]")
         console.print("  1) Show platforms      2) Show all agent tools")
         console.print("  3) Open a platform     4) Unified AI (all tools)")
         console.print("  q) quit")

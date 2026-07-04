@@ -12,10 +12,6 @@ visuals and guided steps so people new to pentest can get productive fast.
 > against your own lab (DVWA, Juice Shop, GOAD, your own router/AP) or systems
 > you have written permission to test.
 
-> ℹ️ **About the name:** "cyberspace" is used here for an open-source cybersecurity
-> software project. "Cyberpunk 2077" is a trademark of CD Projekt Red for
-> entertainment; this project is unrelated software in a different field.
-
 ## ✨ What's inside
 
 | Platform | Emoji | What it does |
@@ -26,11 +22,11 @@ visuals and guided steps so people new to pentest can get productive fast.
 | **ShadowDragon** | 🐍 | Everything else: sqlmap, gobuster, whatweb (web/recon/exploit). |
 | **StickEm** | 🔌 | ESP32 Marauder + FT232 merged into one hardware bridge (wireless + serial console). |
 | **TrainABaby** | 👶 | Train your own personalized AI model: pick a use case + public dataset + cloud GPU, fine-tune, serve it behind an API key, and plug it back into cyberbot. |
-| **CyberPunked** | 🎛️ | The unified dashboard — view/access every tool, or command them all from **one AI**. |
+| **cyberspace** | 🎛️ | The unified dashboard — view/access every tool, or command them all from **one AI**. |
 
 ```
                          ┌─────────────────────────┐
-                         │   CyberPunked dashboard  │  <- cyberspace dashboard
+                         │   cyberspace dashboard  │  <- cyberspace dashboard
                          │   (one AI, all tools)    │
                          └────────────┬─────────────┘
                                       │
@@ -91,7 +87,7 @@ cyberspace airbender nmap 10.10.10.5
 cyberspace shadowdragon whatweb http://10.10.10.5
 
 # Or see everything in one place:
-cyberspace dashboard                              # CyberPunked
+cyberspace dashboard                              # cyberspace
 ```
 
 ## 🧊 IceBerg :: secure  — AI-powered find & browse (brightside / darkside)
@@ -195,7 +191,7 @@ cyberspace/
 │   │   ├── airbender/         #   📶 networking toolkit
 │   │   ├── shadowdragon/      #   🐍 web/recon/exploit toolkit
 │   │   └── stickem/         #   🔌 ESP32 + FT232 bridge
-│   ├── ui/dashboard.py        # 🎛️ CyberPunked
+│   ├── ui/dashboard.py        # 🎛️ cyberspace
 │   └── host.py                # safe host-tool runner
 ├── installer/                 # install.sh + Dockerfile + pi-gen recipe
 └── tests/

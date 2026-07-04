@@ -19,6 +19,28 @@ from .catalog import KALI_CATALOG, all_tools
 console = Console()
 
 
+def _chain_tool(target="", pipeline="", steps=""):
+    from .chain import run_chain, PIPELINES
+    if steps and "->" in steps:
+        sl = [s.strip() for s in steps.split("->")]
+    elif pipeline and pipeline in PIPELINES:
+        sl = PIPELINES[pipeline]["steps"]
+    else:
+        sl = ["whatweb", "searchsploit"]
+    results = run_chain(sl, target)
+    return "\n---\n".join(f"[{k}]\n{v}" for k, v in results.items())
+
+
+def _msf_search_tool(query=""):
+    from .metasploit import search
+    return search(query)
+
+
+def _msf_run_tool(module="", options="", lhost="", lport=4444):
+    from .metasploit import run_exploit
+    return run_exploit(module, options, lhost, lport)
+
+
 class ShadowDragonModule(Module):
     def describe(self) -> ModuleInfo:
         return ModuleInfo(
@@ -94,6 +116,29 @@ class ShadowDragonModule(Module):
         reg(Tool(name="shadowdragon.kali_installed",
                  description="Show which Kali tools are installed on this host.",
                  parameters={"type": "object", "properties": {}}, fn=T.kali_installed))
+        reg(Tool(name="shadowdragon.chain",
+                 description="Run an interlinked attack pipeline. pipelines: web-recon, wp-assault, "
+                 "sqli-exploit, subdomain-hunt, full-assault. Or custom steps separated by '->'.",
+                 parameters={"type": "object",
+                             "properties": {"target": {"type": "string"},
+                                            "pipeline": {"type": "string", "default": ""},
+                                            "steps": {"type": "string", "default": ""}},
+                             "required": ["target"]},
+                 fn=lambda target="", pipeline="", steps="", **_: _chain_tool(target, pipeline, steps)))
+        reg(Tool(name="shadowdragon.msf_search",
+                 description="Search metasploit modules by keyword.",
+                 parameters={"type": "object", "properties": {"query": {"type": "string"}},
+                             "required": ["query"]},
+                 fn=lambda query="", **_: _msf_search_tool(query)))
+        reg(Tool(name="shadowdragon.msf_run",
+                 description="Run a metasploit exploit module (e.g. exploit/windows/smb/ms17_010_eternalblue).",
+                 parameters={"type": "object",
+                             "properties": {"module": {"type": "string"},
+                                            "options": {"type": "string", "default": ""},
+                                            "lhost": {"type": "string", "default": ""},
+                                            "lport": {"type": "integer", "default": 4444}},
+                             "required": ["module"]},
+                 fn=lambda module="", options="", lhost="", lport=4444, **_: _msf_run_tool(module, options, lhost, lport)))
 
     def build_cli(self) -> typer.Typer:
         app = typer.Typer(help="ShadowDragon: all non-networking Kali tools.")
@@ -147,14 +192,79 @@ class ShadowDragonModule(Module):
                 t.add_row(cat, ", ".join(tools))
             console.print(t)
 
-        @app.command("installed")
-        def _installed():
-            """Show which Kali tools are installed on this host."""
-            t = Table("tool", "category", "installed")
-            for cat, tools in KALI_CATALOG.items():
-                for nm in tools:
-                    t.add_row(nm, cat, "[green]yes[/green]" if is_available(nm) else "[red]no[/red]")
+        # --- super-tool: chain + metasploit -------------------------------- #
+        @app.command("chain")
+        def _chain(target: str = typer.Argument(...),
+                    steps: str = typer.Option("", "--steps",
+                    help="custom steps: 'whatweb->searchsploit->metasploit'")):
+            """Run interlinked attack tools as a pipeline."""
+            from .chain import CHAIN_STEPS, run_chain
+            sl = [s.strip() for s in steps.split("->")] if steps else ["whatweb", "searchsploit"]
+            for name, result in run_chain(sl, target,
+                    lambda s,m: console.print(f"[dim]{s:>14}[/dim] {m}")).items():
+                console.print(f"\n[bold red]{'='*40} {name} {'='*40}[/bold red]")
+                console.print(result)
+
+        @app.command("pipelines")
+        def _pipelines():
+            """Show available attack pipelines."""
+            from .chain import PIPELINES
+            t = Table("pipeline", "steps", "description")
+            for name, p in PIPELINES.items():
+                t.add_row(name, " -> ".join(p["steps"]), p["desc"])
             console.print(t)
+            console.print("\n[dim]Custom: cyberspace shadowdragon chain <target> --steps 'whatweb->searchsploit->metasploit'[/dim]")
+
+        @app.command("web-recon")
+        def _webrecon(target: str = typer.Argument(...)):
+            """Pipeline: whatweb -> nuclei -> searchsploit."""
+            from .chain import run_chain, PIPELINES
+            for name, result in run_chain(PIPELINES["web-recon"]["steps"], target,
+                    lambda s,m: console.print(f"[dim]{s:>14}[/dim] {m}")).items():
+                console.print(f"\n[bold red]{'='*40} {name} {'='*40}[/bold red]")
+                console.print(result)
+
+        @app.command("full-assault")
+        def _assault(target: str = typer.Argument(...)):
+            """Pipeline: whatweb -> gobuster -> nikto -> searchsploit -> metasploit."""
+            from .chain import run_chain, PIPELINES
+            for name, result in run_chain(PIPELINES["full-assault"]["steps"], target,
+                    lambda s,m: console.print(f"[dim]{s:>14}[/dim] {m}")).items():
+                console.print(f"\n[bold red]{'='*40} {name} {'='*40}[/bold red]")
+                console.print(result)
+
+        # --- metasploit --------------------------------------------------- #
+        msf_app = typer.Typer(help="Metasploit: search, run exploits, handlers, payloads.")
+        app.add_typer(msf_app, name="msf")
+
+        @msf_app.command("search")
+        def _msf_search(query: str = typer.Argument(...)):
+            """Search metasploit modules."""
+            from .metasploit import search
+            console.print(search(query))
+
+        @msf_app.command("run")
+        def _msf_run(module: str = typer.Argument(..., help="exploit/windows/smb/ms17_010_eternalblue"),
+                     options: str = typer.Option("", "--options", help="RHOSTS=10.10.10.5"),
+                     lhost: str = typer.Option(""), lport: int = typer.Option(4444)):
+            """Run a metasploit exploit module."""
+            from .metasploit import run_exploit
+            console.print(run_exploit(module, options, lhost, lport))
+
+        @msf_app.command("handler")
+        def _msf_handler(payload: str = typer.Option("windows/meterpreter/reverse_tcp"),
+                         lhost: str = typer.Option("0.0.0.0"), lport: int = typer.Option(4444)):
+            """Start a multi/handler to catch a reverse shell."""
+            from .metasploit import handler
+            console.print(handler(payload, lhost, lport))
+
+        @msf_app.command("payload")
+        def _msf_payload(payload: str = typer.Option("windows/meterpreter/reverse_tcp"),
+                         lhost: str = typer.Option(""), lport: int = typer.Option(4444),
+                         fmt: str = typer.Option("raw"), outfile: str = typer.Option("")):
+            """Generate a payload with msfvenom."""
+            from .metasploit import payload_generate
+            console.print(payload_generate(payload, lhost, lport, fmt, outfile))
 
         return app
 

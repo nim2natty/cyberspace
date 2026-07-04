@@ -3,7 +3,8 @@
 Commands:
   cyberspace setup         configure the agent FIRST (unlocks agentic features)
   cyberspace agent         chat with the cyberbot agent
-  cyberspace dashboard     CyberPunked: unified view + one-AI control plane
+  cyberspace dashboard     unified view + one-AI control plane
+  cyberspace memory        view/modify the learned operator profile
   cyberspace modules       list loaded platforms
   cyberspace tools         list all agent tools
   cyberspace doctor        check what's installed / provisionable
@@ -78,9 +79,39 @@ def agent():
 
 @app.command()
 def dashboard():
-    """CyberPunked: unified dashboard + one-AI control plane."""
+    """cyberspace unified dashboard + one-AI control plane."""
     from .ui.dashboard import interactive
     interactive()
+
+
+@app.command()
+def memory(action: str = typer.Argument("show", help="show|skill|note|recall|recent"),
+           value: str = typer.Argument("", help="value for skill/note/recall/recent")):
+    """View/modify the learned operator profile (personalization memory)."""
+    from . import memory as mem
+    if action == "show":
+        console.print(Panel.fit(mem.context_block(), title="operator profile + memory",
+                                border_style="magenta"))
+    elif action == "skill" and value:
+        mem.set_skill_level(value)
+        console.print(f"[green]skill level set to[/green] {value}")
+    elif action == "note" and value:
+        mem.add_note(value)
+        console.print(f"[green]note saved:[/green] {value}")
+    elif action == "recall" and value:
+        for ep in mem.recall(value):
+            console.print(f"[dim]{ep.get('ts','')[:19]}[/dim] {ep.get('platform','')}: "
+                          f"{ep.get('action','')} -> {ep.get('result_summary','')[:80]}")
+    elif action == "recent":
+        for ep in mem.recent_episodes(int(value) if value else 10):
+            console.print(f"[dim]{ep.get('ts','')[:19]}[/dim] {ep.get('platform','')}: "
+                          f"{ep.get('action','')}")
+    elif action == "tools":
+        for tool, count in mem.top_tools(10):
+            console.print(f"  {tool}: {count}x")
+    else:
+        console.print("[dim]usage: cyberspace memory show|skill <level>|note <text>|"
+                      "recall <query>|recent [N]|tools[/dim]")
 
 
 @app.command()

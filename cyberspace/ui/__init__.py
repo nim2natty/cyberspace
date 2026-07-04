@@ -1,1 +1,1 @@
-"""UI package - CyberPunked dashboard."""
+"""UI package - cyberspace dashboard."""

@@ -27,13 +27,22 @@ DEFAULT_SYSTEM = (
 )
 
 
+def build_system_prompt(base: str = "") -> str:
+    """Inject the learned operator profile (memory) into the system prompt."""
+    try:
+        from ..memory import context_block
+        return (base or DEFAULT_SYSTEM) + context_block()
+    except Exception:
+        return base or DEFAULT_SYSTEM
+
+
 class Agent:
     def __init__(self, cfg: LLMConfig, registry=TOOL_REGISTRY, console: Optional[Console] = None):
         self.cfg = cfg
         self.provider = get_provider(cfg)
         self.registry = registry
         self.console = console or Console()
-        system = cfg.system_prompt or DEFAULT_SYSTEM
+        system = build_system_prompt(cfg.system_prompt or DEFAULT_SYSTEM)
         self.messages: list[dict] = [{"role": "system", "content": system}]
         self.max_iterations = 12
 
@@ -48,6 +57,13 @@ class Agent:
         self.console.print(f"   [dim]calling[/dim] [cyan]{call.name}[/cyan]({call.arguments})")
         try:
             result = tool.fn(**call.arguments)
+            # Record this action in memory for personalization across sessions.
+            try:
+                from ..memory import record
+                record(platform=call.name.split(".")[0], action=call.name,
+                       args=call.arguments, result_summary=str(result)[:300])
+            except Exception:
+                pass
             return str(result)
         except Exception as e:
             return f"ERROR executing {call.name}: {e}"
