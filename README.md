@@ -63,7 +63,7 @@ pip install -e . && playwright install chromium
 
 ## 🧠 Step 1 (important): configure the agent FIRST
 
-Every platform's agentic features plug into the **Cyberbot agent**, so set it
+Every platform's agentic features plug into the **cyberbot agent**, so set it
 up before anything else. Once configured, the agent automatically gains control
 of every tool you install afterward.
 

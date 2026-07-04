@@ -1,4 +1,4 @@
-"""The Cyberbot agent core - the tool-calling ReAct loop.
+"""The cyberbot agent core - the tool-calling ReAct loop.
 
 Flow:
   user msg -> LLM (with all module tools) -> [tool_calls] -> execute tools ->

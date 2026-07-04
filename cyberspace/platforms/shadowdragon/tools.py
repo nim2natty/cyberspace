@@ -1,7 +1,7 @@
 """ShadowDragon tool functions (agent-callable wrappers around Kali tools).
 
 Curated wrappers validate input and use the safe host runner (no shell
-injection). The generic kali_run lets Cyberbot invoke ANY Kali tool by name,
+injection). The generic kali_run lets cyberbot invoke ANY Kali tool by name,
 so ShadowDragon truly covers all non-networking Kali tools.
 """
 from __future__ import annotations

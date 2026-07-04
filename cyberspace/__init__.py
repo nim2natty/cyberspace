@@ -1,7 +1,7 @@
 """cyberspace - an open-source agentic pentest platform.
 
 A modular, agent-first platform layered on top of Kali Linux for learning and
-practicing penetration testing. The Cyberbot agent (any LLM of your choice)
+practicing penetration testing. The cyberbot agent (any LLM of your choice)
 orchestrates a set of platforms that wrap real offensive-security tooling:
 
     IceBerg       OPSEC browser + system opsec layer

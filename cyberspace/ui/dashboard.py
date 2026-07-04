@@ -2,7 +2,7 @@
 
 Two modes:
   - Interactive menu: see all modules + their tools, launch any CLI directly.
-  - Unified AI: one conversation where the Cyberbot agent can call ANY tool
+  - Unified AI: one conversation where the cyberbot agent can call ANY tool
     across ALL modules (IceBerg + AirBender + ShadowDragon + StickEm).
 
 This is `cyberspace dashboard` (a.k.a CyberPunked).

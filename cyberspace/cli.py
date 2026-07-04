@@ -2,7 +2,7 @@
 
 Commands:
   cyberspace setup         configure the agent FIRST (unlocks agentic features)
-  cyberspace agent         chat with the Cyberbot agent
+  cyberspace agent         chat with the cyberbot agent
   cyberspace dashboard     CyberPunked: unified view + one-AI control plane
   cyberspace modules       list loaded platforms
   cyberspace tools         list all agent tools

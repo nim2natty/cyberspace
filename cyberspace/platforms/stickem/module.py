@@ -1,7 +1,7 @@
 """StickEm module - the ESP32 Marauder + FT232 platform.
 
 Exposes both its own CLI (`cyberspace stickem ...`) and agent tools so the
-Cyberbot agent can drive wireless attacks and serial consoles in conversation.
+cyberbot agent can drive wireless attacks and serial consoles in conversation.
 """
 from __future__ import annotations
 
