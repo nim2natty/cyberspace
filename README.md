@@ -4,7 +4,7 @@
 
 cyberspace turns a Raspberry Pi 5 (or any Linux/macOS/Windows machine) into a
 single, friendly command center for practicing penetration testing. Use an API 
-key - or train your own LLM, creating your own **personal AI agent**, with memory.
+key - or train your own LLM, to create your own **personal AI agent**, with memory.
 Everything is driven from one CLI, with visuals and guided steps so people new to 
 the field can get productive fast.
 
