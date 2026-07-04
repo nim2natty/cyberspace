@@ -45,12 +45,39 @@ def _tool_new_profile(name: str = "auto", persona: str = "win-chrome"):
     return f"created IceBerg profile '{name}' from persona '{persona}'"
 
 
+def _tool_e_find(query: str = "", mode: str = "bright", preset: str = "general"):
+    """Agent-callable: run the IceBerg :: e AI find pipeline (bright/dark)."""
+    if not query:
+        return "query required (e.g. iceberg.e_find query='ransomware group X', mode='dark')"
+    from .e.pipeline import run_find
+    from .e.security import SecurityConfig
+    sec = SecurityConfig.load()
+    if mode in ("bright", "dark"):
+        sec.mode = mode
+    inv = run_find(query, sec=sec, preset=preset)
+    head = (f"[mode={inv.mode} results={len(inv.results)} filtered={len(inv.filtered)} "
+            f"scraped={len(inv.scraped)}]\n")
+    return head + (inv.summary or "(no summary)")
+
+
+def _tool_e_status(**_):
+    """Agent-callable: report IceBerg :: e mode + Tor reachability."""
+    from .e.tor import tor_available
+    from .e.security import SecurityConfig, dark_settings
+    sec = SecurityConfig.load()
+    up = tor_available(sec.tor_socks_host, sec.tor_socks_port)
+    lines = [f"e mode: {sec.mode}", f"Tor SOCKS ({sec.socks_url()}): {'up' if up else 'down'}"]
+    if sec.mode == "dark":
+        lines += dark_settings(sec)
+    return "\n".join(lines)
+
+
 class IceBergModule(Module):
     def describe(self) -> ModuleInfo:
         return ModuleInfo(
             name="iceberg", display_name="IceBerg", version="0.1.0",
             emoji="\U0001f9ca",
-            description="OPSEC browser + system opsec (anti-detect, DoH, proxy, WebRTC, MAC).",
+            description="OPSEC browser + system opsec + 'e' AI find (bright/dark, Tor).",
             requires_tools=["playwright", "macchanger", "tor", "proxychains"],
         )
 
@@ -74,6 +101,25 @@ class IceBergModule(Module):
                         "properties": {"name": {"type": "string"},
                                        "persona": {"type": "string", "default": "win-chrome"}},
                         "required": ["name"]}, fn=_tool_new_profile))
+        registry.register(Tool(
+            name="iceberg.e_find",
+            description="AI-powered OSINT find: refine a query, search clearnet (bright) or "
+                        "Tor onion engines (dark), filter, scrape, and summarize. "
+                        "mode='dark' requires Tor. Use iceberg.e_status first.",
+            parameters={"type": "object",
+                        "properties": {"query": {"type": "string"},
+                                       "mode": {"type": "string", "enum": ["bright", "dark"],
+                                                "default": "bright"},
+                                       "preset": {"type": "string",
+                                                  "enum": ["general", "threat_intel",
+                                                           "personal_identity",
+                                                           "corporate_espionage"],
+                                                  "default": "general"}},
+                        "required": ["query"]}, fn=_tool_e_find))
+        registry.register(Tool(
+            name="iceberg.e_status",
+            description="Report IceBerg :: e mode and whether the Tor SOCKS proxy is reachable.",
+            parameters={"type": "object", "properties": {}}, fn=_tool_e_status))
 
     def build_cli(self) -> typer.Typer:
         app = typer.Typer(help="IceBerg: OPSEC browser + system opsec.")
@@ -129,6 +175,10 @@ class IceBergModule(Module):
         @app.command("check")
         def check():
             console.print(opsec.selfcheck())
+
+        # IceBerg :: e  - AI-powered find & browse (bright/dark), incl. the GUI.
+        from .e.cli import build_e_cli
+        app.add_typer(build_e_cli(console), name="e")
 
         return app
 

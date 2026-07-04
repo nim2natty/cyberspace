@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cyberspace"
-version = "0.1.0"
+version = "0.2.0"
 description = "cyberspace - an open-source agentic pentest platform for learners and pros"
 readme = "README.md"
 license = { text = "MIT" }
@@ -18,10 +18,14 @@ dependencies = [
     "pydantic>=2.6",
     "PyYAML>=6.0",
     "pyserial>=3.5",
+    "requests>=2.31",
+    "pysocks>=1.7",
+    "beautifulsoup4>=4.12",
 ]
 
 [project.optional-dependencies]
 ui = ["textual>=0.60"]
+gui = ["streamlit>=1.30"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]

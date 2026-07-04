@@ -18,7 +18,7 @@ from ..modules.base import TOOL_REGISTRY, Tool
 from .llm import AgentResponse, LLMConfig, get_provider
 
 DEFAULT_SYSTEM = (
-    "You are Cyberbot, an agentic assistant for a penetration-testing platform "
+    "You are cyberbot, an agentic assistant for a penetration-testing platform "
     "used for LEGAL security education and authorized assessments only. You help "
     "the operator plan and execute engagements by calling the available tools. "
     "Always think step by step, call one tool at a time when unsure, and keep "
@@ -62,7 +62,7 @@ class Agent:
 
             if not resp.tool_calls:
                 self.console.print()
-                self.console.print(f"[green]Cyberbot>[/green] {resp.text}")
+                self.console.print(f"[green]cyberbot>[/green] {resp.text}")
                 return resp.text
 
             for call in resp.tool_calls:

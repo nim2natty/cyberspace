@@ -48,7 +48,7 @@ def setup(force: bool = typer.Option(False, "--force", help="reconfigure")):
 
 @app.command()
 def agent():
-    """Chat with the Cyberbot agent (all platform tools available)."""
+    """Chat with the cyberbot agent (all platform tools available)."""
     _autoload()
     from .agent.config import is_configured, load_config
     from .agent.core import Agent
@@ -61,7 +61,7 @@ def agent():
     cfg = load_config()
     a = Agent(cfg)
     console.print(Panel.fit(
-        f"[bold cyan]Cyberbot agent[/bold cyan] ({cfg.provider}/{cfg.model})\n"
+        f"[bold cyan]cyberbot agent[/bold cyan] ({cfg.provider}/{cfg.model})\n"
         f"{len(TOOL_REGISTRY.all())} tools loaded. Type 'exit' to quit.",
         border_style="cyan"))
     from rich.prompt import Prompt

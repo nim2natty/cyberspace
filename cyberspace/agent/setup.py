@@ -21,7 +21,7 @@ console = Console()
 
 def _banner() -> None:
     console.print(Panel.fit(
-        "[bold cyan]CYBERPUNK[/bold cyan] — agent setup\n"
+        "[bold cyan]cyberbot[/bold cyan] — agent setup\n"
         "[dim]Configure your personal pentest agent first. Every platform "
         "(IceBerg, AirBender, ShadowDragon, StickEm) plugs into this agent, "
         "so this step unlocks all agentic features.[/dim]",
