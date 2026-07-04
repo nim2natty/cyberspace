@@ -1,12 +1,12 @@
 # 🥷 cyberspace
 
-**An open-source, agent-first penetration-testing platform — for learners and pros.**
+** democratize ai **
 
 cyberspace turns a Raspberry Pi 5 (or any Linux/macOS/Windows machine) into a
-single, friendly command center for practicing penetration testing. A
-**personal AI agent** (any LLM you choose) orchestrates a set of platforms that
-wrap real offensive-security tooling. Everything is driven from one CLI, with
-visuals and guided steps so people new to pentest can get productive fast.
+single, friendly command center for practicing penetration testing. Use an API 
+key or train your own llm to give birth to your own **personal AI agent**
+Everything is driven from one CLI, with visuals and guided steps so people new to 
+the field can get productive fast.
 
 > ⚖️ **For legal security education and authorized assessments only.** Practice
 > against your own lab (DVWA, Juice Shop, GOAD, your own router/AP) or systems
@@ -16,13 +16,13 @@ visuals and guided steps so people new to pentest can get productive fast.
 
 | Platform | Emoji | What it does |
 |---|:--:|---|
-| **cyberbot agent** | 🧠 | Your personal pentest AI — local Ollama, OpenAI, Anthropic, or any custom endpoint. **Configure it first** — it powers every other platform. |
-| **IceBerg** | 🧊 | OPSEC browser + system opsec + **:: secure** AI find (brightside clearnet / darkside Tor). Custom fingerprints, DoH, proxy, WebRTC leak prevention, canvas/WebGL/audio spoofing, MAC rotation. |
-| **AirBender** | 📶 | Networking toolkit: Merger nmap, masscan, host discovery — functionality agent-driven. |
-| **ShadowDragon** | 🐍 | Kali's interface: metaploit, sqlmap, gobuster, whatweb (web/recon/exploit). - agentic command over system |
+| **cyberbot agent** | 🧠 | Your pentest AI buddy — local Ollama, OpenAI, Anthropic, or any custom endpoint. **Configure it first** — it powers every other platform. |
+| **IceBerg** | 🧊 | OPSEC browser + system opsec + **:: secure** AI searches darkweb. Clearnet seaches leave no fingerprint. Customize fingerprints, DoH, proxy, WebRTC leak prevention, canvas/WebGL/audio spoofing, MAC rotation. |
+| **AirBender** | 📶 | Networking toolkit: Merger nmap, masscan, host discovery — cross functionality utilized by AI. |
+| **ShadowDragon** | 🐍 | Kali's interface: metaploit, sqlmap, gobuster, whatweb (web/recon/exploit). - cross-functional AI |
 | **StickEm** | 🔌 | ESP32 Marauder + FT232 + Router merged into one hardware bridge (wireless + serial console + router). |
-| **TrainABaby** | 👶 | Train your own personalized AI model: pick a use case + public dataset + cloud GPU, fine-tune, serve it behind an API key, and plug it back into cyberbot. |
-| **cyberspace** | 🎛️ | The unified dashboard — view/access every tool, or command them all from **one AI**. |
+| **TrainABaby** | 👶 | Give your baby a purpose: pick a use case + public dataset + cloud GPU, fine-tune, serve it behind an API key, and plug it back into cyberbot.|
+| **cyberspace** | 🎛️ | Dashboard - view/access every tool, or command them all from **one AI**. |
 
 ```
                          ┌─────────────────────────┐
