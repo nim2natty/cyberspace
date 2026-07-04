@@ -9,8 +9,7 @@ Everything is driven from one CLI, with visuals and guided steps so people new t
 the field can get productive fast.
 
 > ⚖️ **For legal security education and authorized assessments only.** Practice
-> against your own lab (DVWA, Juice Shop, GOAD, your own router/AP) or systems
-> you have written permission to test.
+> against your own lab, or systems you have written permission to test.
 
 ## ✨ What's inside
 
