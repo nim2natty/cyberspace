@@ -1,223 +1,154 @@
-# 🥷 cyberspace
+<p align="center">
+  <img src=".github/banner.svg" width="100%" alt="cyberspace banner">
+</p>
 
-** command a vector in cyberspace, independently **
+---
 
-cyberspace turns any raspbery pi/linux machine into a
-single, friendly command center for practicing penetration testing. Use an API 
-key - or use our tool to train your own LLM and create your own **personal AI agent**.
-Everything is driven from one CLI, with visuals and guided steps so people new to 
-the field can get productive fast.
+<p align="center">
+  <strong>cyberspace</strong> is the first pentest platform that gives you a <em>swarm of specialized AI agents</em>,
+  each commanding its own arsenal of tools — all from one clean command line.
+</p>
 
-> ⚖️ **For legal security education and authorized assessments only.** Practice
-> against your own lab, or systems you have written permission to test.
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white">
+  <img alt="License" src="https://img.shields.io/github/license/nim2natty/cyberspace?color=green">
+  <img alt="Agents" src="https://img.shields.io/badge/agents-6%20specialists-a855f7">
+  <img alt="Tools" src="https://img.shields.io/badge/tools-40%20interlinked-00d9ff">
+  <img alt="Stars" src="https://img.shields.io/github/stars/nim2natty/cyberspace?style=social">
+</p>
 
-## ✨ What's inside
+---
 
-| Platform | Emoji | What it does |
-|---|:--:|---|
-| **cyberbot agent** | 🧠 | Your pentest AI buddy — local Ollama, OpenAI, Anthropic, or any custom endpoint. **Configure it first** — it powers every other platform. |
-| **IceBerg** | 🧊 | OPSEC browser + system opsec + **:: secure** AI searches darkweb. Clearnet seaches leave no fingerprint. Customize fingerprints, DoH, proxy, WebRTC leak prevention, canvas/WebGL/audio spoofing, MAC rotation. |
-| **AirBender** | 📶 | Networking toolkit: Merger nmap, masscan, host discovery — cross functionality utilized by AI. |
-| **ShadowDragon** | 🐍 | Kali's interface: metaploit, sqlmap, gobuster, whatweb (web/recon/exploit). - cross-functional AI |
-| **StickEm** | 🔌 | ESP32 Marauder + FT232 + Router merged into one hardware bridge (wireless + serial console + router). |
-| **TrainABaby** | 👶 | Give your baby a purpose: pick a use case + public dataset + cloud GPU, fine-tune, serve it behind an API key, and plug it back into cyberbot.|
-| **cyberspace** | 🎛️ | Dashboard - view/access every tool, or command them all from **one AI**. |
+## What makes cyberspace different
+
+There are plenty of AI pentest tools. Here's why cyberspace exists:
+
+| Feature | cyberspace | PentestGPT (14k★) | Tandem | vulnhuntr (2.7k★) | hackingBuddyGPT (1.1k★) |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Multi-agent swarm** (6 specialists) | ✅ | ❌ single | ✅ 4 agents | ❌ | ❌ |
+| **Hardware control** (ESP32 + FT232 + router) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **OPSEC anti-detect browser** (Tor/dark web) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Train your own AI model** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Memory + personalization** (learns you) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Chain pipelines** (tools feed each other) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Any LLM** (local Ollama / OpenAI / Claude) | ✅ | OpenAI | 8 providers | OpenAI | OpenAI |
+| **Runs on RPi5 / Kali Docker** | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+> **TL;DR:** others do one thing. cyberspace is the **all-in-one platform** — a team
+> of agents that can scan your network, exploit a web app, browse the dark web
+> anonymously, attack your WiFi hardware, AND train a custom AI to run it all.
+
+## The swarm
+
+When you run `cyberspace swarm`, you command a team through one Orchestrator:
 
 ```
-                         ┌─────────────────────────┐
-                         │   cyberspace dashboard  │  <- cyberspace dashboard
-                         │   (one AI, all tools)    │
-                         └────────────┬─────────────┘
-                                      │
-        ┌─────────────────────────────┼─────────────────────────────┐
-        ▼                ▼            ▼                ▼             ▼
-   🧠 cyberbot      🧊 IceBerg   📶 AirBender   🐍 ShadowDragon  🔌 StickEm
-   agent core        OPSEC        networking     web/exploit       ESP32+FT232
-        │
-   Ollama / OpenAI / Anthropic / custom LLM   <- configure FIRST (cyberspace setup)
+                         ┌──────────────────────┐
+                         │   ORCHESTRATOR        │  ← you talk to this
+                         │   (mission commander) │
+                         └──────────┬───────────┘
+          ┌──────────┬─────────────┼──────────────┬─────────────┐
+          ▼          ▼             ▼              ▼             ▼
+     ┌────────┐ ┌────────┐  ┌───────────┐  ┌──────────┐  ┌────────┐
+     │ Recon  │ │Exploit │  │  Ghost    │  │ Hardware │  │ Smith  │
+     │  📶    │ │  🐍    │  │  🧊       │  │  🔌      │  │  👶    │
+     │        │ │        │  │           │  │          │  │        │
+     │nmap    │ │sqlmap  │  │anti-detect│  │ESP32     │  │train   │
+     │masscan │ │metasp. │  │Tor/darkweb│  │FT232     │  │fine-   │
+     │chains  │ │chains  │  │OSINT      │  │OpenWrt   │  │tune    │
+     └────────┘ └────────┘  └───────────┘  └──────────┘  └────────┘
+                                                      ┌────────┐
+                                                      │ Scribe │  ← writes the report
+                                                      │  📝    │
+                                                      └────────┘
 ```
 
-## 🚀 Install
+Each agent has its **own persona, scoped tools, and system prompt**. The Orchestrator
+breaks your objective into phases and delegates each to the right specialist,
+chaining their outputs together.
 
-**A — one command (Linux / macOS):**
+**Example:** *"Scan 10.10.10.0/24, find the web app, test it, write a report."*
+→ **Recon** (discovers hosts + web app) → **Exploit** (tests the app) → **Scribe** (report).
+
+## Quick start
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
+cyberspace quickstart    # one command — configure agent + launch the swarm
+
+# Or step by step:
+cyberspace setup         # pick your LLM (local Ollama, OpenAI, Claude, or custom)
+cyberspace swarm         # command the team
 ```
-**B — Docker (Mac / Linux / Windows):**
+
+<details>
+<summary><b>Other install methods</b></summary>
+
 ```bash
-docker build -t cyberspace .
-docker run -it --rm cyberspace            # dashboard
-# expose serial hardware: --device /dev/ttyUSB0
-```
-**C — Flash a Raspberry Pi 5 image:** see [`installer/rpi-build/README.md`](installer/rpi-build/README.md) (pi-gen recipe).
-**D — From source:**
-```bash
+# From source
 git clone https://github.com/nim2natty/cyberspace && cd cyberspace
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e . && playwright install chromium
+
+# Docker
+docker build -t cyberspace . && docker run -it --rm cyberspace swarm
+
+# One-liner (Linux/macOS)
+curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
+</details>
 
-## 🧠 Step 1 (important): configure the agent FIRST
+## The platforms
 
-Every platform's agentic features plug into the **cyberbot agent**, so set it
-up before anything else. Once configured, the agent automatically gains control
-of every tool you install afterward.
+Every platform is a super-tool with **interlinked commands** — tools chain together
+so one step's output feeds the next.
 
-```bash
-cyberspace setup      # guided wizard: ollama | openai | anthropic | custom
-cyberspace doctor     # confirm everything is ready
-```
+| Platform | Agent | What it does |
+|---|:---:|---|
+| **AirBender** 📶 | Recon | ALL networking tools (nmap, masscan, aircrack-ng, netcat, dig...) chained into pipelines. `recon` runs ping-sweep → port-scan → service-detect in one go. |
+| **ShadowDragon** 🐍 | Exploit | ALL non-networking Kali tools + **Metasploit**. Chain whatweb → searchsploit → msfconsole. Includes web, password, recon, post-exploit, forensics, RE. |
+| **IceBerg** 🧊 | Ghost | OPSEC anti-detect browser (canvas/WebGL/WebRTC spoofing, DoH, fingerprint profiles) + **:: secure** AI find (brightside clearnet / darkside Tor OSINT). |
+| **StickEm** 🔌 | Hardware | ESP32 Marauder + FT232 + **OpenWrt router** — three hardware interfaces unified. WiFi attacks, serial console, router config from one command. |
+| **TrainABaby** 👶 | Smith | Train your **own** AI model: pick a dataset, rent a cloud GPU (Vast.ai), fine-tune, serve behind an API key, and plug it back into the swarm. |
 
-## 🧰 Step 2: use it
+## Micro-features that add up
 
-```bash
-# Talk to the agent — it calls any tool across all platforms:
-cyberspace agent
-# e.g. "Scan my lab 10.10.10.0/24, identify the web app, then browse it with IceBerg."
+- **🧠 Memory + personalization** — remembers your tools, targets, and skill level across sessions. Injects it into the agent prompt so it needs *fewer prompts over time*. `cyberspace memory show`
+- **🔗 Chain pipelines** — `airbender recon 10.10.10.0/24` runs ping-sweep → nmap → service-detect automatically. `shadowdragon full-assault` runs whatweb → gobuster → nikto → searchsploit → metasploit.
+- **⚡ Model switching** — swap the active LLM: `cyberspace iceberg model switch qwen2.5-coder:7b`
+- **📊 Engagement reports** — `cyberspace report --out report.md` generates a markdown report from activity history
+- **🚀 Quickstart** — `cyberspace quickstart` configures + launches in one step
+- **🔄 Model training loop** — train → serve → `cyberspace trainababy use <model>` makes it the swarm's brain
+- **🎛️ RoE support** — `cyberspace swarm --roe engagement.md`
 
-# Or run a platform directly:
-cyberspace iceberg profile new win --persona win-chrome
-cyberspace iceberg browse -p win --selftest      # verify spoofing offline
-cyberspace iceberg secure status                       # :: secure AI find - check Tor + deps
-cyberspace iceberg secure config                       # set brightside/darkside posture FIRST
-cyberspace iceberg secure find "ransomware ACME leak" --mode dark   # AI find via Tor
-cyberspace iceberg secure gui                          # graphic interface (Streamlit)
-cyberspace airbender nmap 10.10.10.5
-cyberspace shadowdragon whatweb http://10.10.10.5
+## Why it's great for learning
 
-# Or see everything in one place:
-cyberspace dashboard                              # cyberspace
-```
+Maps to **CompTIA PenTest+** domains: Info Gathering (AirBender), Vulnerability ID & Attacks (ShadowDragon), Reporting (Scribe), OPSEC (IceBerg). The agent-first design also teaches the modern **agentic offensive workflow**.
 
-## 🧊 IceBerg :: secure  — AI-powered find & browse (brightside / darkside)
+## ⚠️ For legal security education and authorized assessments only
 
-A feature of IceBerg that turns the platform into a **customizable, secure,
-all-in-one AI browsing experience**. It adapts the open-source
-[Robin](https://github.com/apurvsinghgautam/robin) dark-web OSINT engine (MIT,
-© apurvsinghgautam) so the **same cyberbot LLM** you configured in Step 1
-refines a query, searches, filters, scrapes, and writes a structured summary.
-
-Two modes:
-- **brightside** — clearnet search + AI find (no Tor). DoH on, WebRTC blocked.
-- **darkside** — full internet via **Tor**: searches 16 onion engines over
-  SOCKS5h, with a different security posture (new identity per run, DoH, WebRTC
-  lockdown, TLS verification relaxed for self-signed onion certs).
-
-> ⚖️ Set your security configuration **before** darkside browsing
-> (`cyberspace iceberg secure config`). Dark mode changes your transport, DNS, and
-> WebRTC posture — the wizard makes you confirm each.
-
-```bash
-cyberspace iceberg secure config            # interactive posture wizard (do this first)
-cyberspace iceberg secure status            # Tor reachable? deps installed?
-cyberspace iceberg secure find "<query>" --mode dark --preset threat_intel
-cyberspace iceberg secure browse http://example.onion --mode dark   # torified browser
-cyberspace iceberg secure gui               # graphic interface at localhost:8501
-```
-
-Presets: `general`, `threat_intel`, `personal_identity`, `corporate_espionage`.
-The agent can call it too: ask cyberbot *"find leaked credentials for ACME on the
-dark web"* and it invokes `iceberg.secure_find` across all your tools.
-
-## 👶 TrainABaby — train your own personalized AI model
-
-TrainABaby closes the loop: **train a custom model → serve it → plug it back into
-cyberbot as its brain.** Describe what you want your AI to do, pick a public
-training dataset + base model + GPU, fine-tune for N days, then deploy it behind an
-OpenAI-compatible API key any agent can use.
-
-```bash
-# browse what's possible
-cyberspace trainababy usecases                      # offensive, defensive, assistant, ...
-cyberspace trainababy datasets -u offensive_pentest  # public HF datasets
-cyberspace trainababy gpus                           # what each GPU can train
-cyberspace trainababy providers                      # Vast.ai, RunPod, Lambda, local
-
-# search LIVE cloud GPU offers (real prices, no key needed to browse)
-cyberspace trainababy instances --gpu RTX_4090
-
-# plan + train
-cyberspace trainababy plan "offensive pen security"  # interactive cost estimate
-cyberspace trainababy train offensive_pentest --base llama3.1-8b --gpu RTX_4090 --days 2
-
-# serve + use
-cyberspace trainababy jobs                           # training statistics (loss, $, hours)
-cyberspace trainababy models                         # trained model registry
-cyberspace trainababy serve llama3.1-8b-offensive_pentest-d2 --target ollama
-cyberspace trainababy keys                           # API keys for served models
-cyberspace trainababy use llama3.1-8b-offensive_pentest-d2   # cyberbot now runs YOUR model
-```
-
-**Model switching** (new in IceBerg): switch the active LLM without re-running setup:
-```bash
-cyberspace iceberg model list                 # current model + what's installed
-cyberspace iceberg model switch qwen2.5-coder:7b
-cyberspace iceberg model provider openai --api-key sk-...
-```
-
-## 🔌 Step 3: connect your hardware
-
-cyberspace drives real gear in a lab. After `cyberspace setup`:
-
-```bash
-cyberspace stickem ports                 # find your ESP32 + FT232
-cyberspace stickem set-esp32 /dev/ttyUSB0
-cyberspace stickem set-ft232  /dev/ttyUSB1
-cyberspace stickem marauder scanap        # drive Marauder directly
-cyberspace stickem console                # raw serial console (router/IoT UART)
-```
-
-Then just ask the agent in plain English:
-> *"Scan for access points, select my LabNet SSID, and capture a handshake."*
-
-> **Scope:** 2.4GHz deauth/rogue-AP and serial UART are for **your own** lab
-> AP/router/IoT devices. Wireless emissions can't be contained to a cable, so
-> never target networks or spectrum you don't own.
+Practice against your own lab (DVWA, Juice Shop, GOAD, your own router/AP) or systems you have written permission to test.
 
 ## 🗂️ Project layout
 
 ```
 cyberspace/
-├── cyberspace/
-│   ├── cli.py                 # main CLI (setup/agent/dashboard/doctor/...)
-│   ├── agent/                 # LLM-agnostic agent (ollama/openai/anthropic/custom)
-│   │   ├── core.py            #   tool-calling loop
-│   │   ├── llm.py             #   provider abstraction
-│   │   └── setup.py           #   first-run wizard
-│   ├── modules/               # plugin system (base + auto-discovery)
-│   ├── platforms/             # built-in platforms:
-│   │   ├── iceberg/           #   🧊 OPSEC browser + system opsec
-│   │   ├── airbender/         #   📶 networking toolkit
-│   │   ├── shadowdragon/      #   🐍 web/recon/exploit toolkit
-│   │   └── stickem/         #   🔌 ESP32 + FT232 bridge
-│   ├── ui/dashboard.py        # 🎛️ cyberspace
-│   └── host.py                # safe host-tool runner
-├── installer/                 # install.sh + Dockerfile + pi-gen recipe
-└── tests/
+├── swarm.py                      # multi-agent orchestration (Orchestrator + 6 sub-agents)
+├── memory.py                     # personalization (profile, episodes, semantic facts)
+├── agent/                        # LLM providers (ollama/openai/anthropic/custom)
+├── platforms/
+│   ├── airbender/                # 📶 networking super-tool + chain engine
+│   ├── shadowdragon/             # 🐍 ALL Kali tools + metasploit + chain
+│   ├── iceberg/secure/           # 🧊 OPSEC + anti-detect + :: secure AI find
+│   ├── stickem/                  # 🔌 ESP32 + FT232 + OpenWrt router
+│   └── trainababy/               # 👶 train your own model
+├── ui/dashboard.py               # the swarm hub (tandem-style control plane)
+├── host.py                       # safe host-tool runner (no shell injection)
+└── installer/                    # install.sh + Dockerfile + RPi5 recipe
 ```
 
-**Adding a platform (third-party friendly):** ship a package named
-`cyberspace_module_<name>` exposing a `MODULE` (`cyberspace.modules.base.Module`
-subclass). It's auto-discovered and gets its own CLI subcommand + agent tools.
+## Contributing
 
-## 🎓 Why it's great for CompTIA PenTest+
-
-Every domain maps to a platform: Info Gathering (AirBender), Vulnerability ID &
-Exploits (ShadowDragon), Wireless/IoT (StickEm), OPSEC (IceBerg), Reporting
-(the agent writes up findings). The agent-first design also teaches the modern
-**agentic offensive workflow** (PentestGPT/CAI-style) — a genuine career edge.
-
-## ⚠️ Limitations (honest)
-
-- **TLS/JA3 fingerprint** is set by the browser stack; IceBerg mitigates (common
-  Chromium JA3 + VPN + DoH) but can't fully customize it via JS injection.
-- Agent loops are bounded; very long engagements need chunking.
-- StickEm hardware attacks are 2.4GHz / serial only and lab-scoped.
-
-## 🤝 Contributing
-
-PRs welcome. Needs love: more ShadowDragon wrappers (metasploit, bloodhound,
-netexec), a richer Textual dashboard, and `.deb`/AUR packages.
+PRs welcome. The plugin system auto-discovers any `cyberspace_module_*` package.
 
 ## License
 

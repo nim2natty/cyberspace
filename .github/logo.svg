@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D9FF"/><stop offset="0.5" stop-color="#00FF9D"/><stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#0D1117"/>
+  <!-- outer hexagon ring -->
+  <polygon points="128,40 198,80 198,176 128,216 58,176 58,80" fill="none" stroke="url(#g)" stroke-width="3" opacity="0.4"/>
+  <!-- connection lines -->
+  <g stroke="url(#g)" stroke-width="1.5" opacity="0.2">
+    <line x1="128" y1="128" x2="128" y2="40"/><line x1="128" y1="128" x2="198" y2="80"/>
+    <line x1="128" y1="128" x2="198" y2="176"/><line x1="128" y1="128" x2="128" y2="216"/>
+    <line x1="128" y1="128" x2="58" y2="176"/><line x1="128" y1="128" x2="58" y2="80"/>
+  </g>
+  <!-- 6 sub-agent dots -->
+  <g fill="#0D1117" stroke="url(#g)" stroke-width="2">
+    <circle cx="128" cy="40" r="10"/><circle cx="198" cy="80" r="10"/><circle cx="198" cy="176" r="10"/>
+    <circle cx="128" cy="216" r="10"/><circle cx="58" cy="176" r="10"/><circle cx="58" cy="80" r="10"/>
+  </g>
+  <!-- center orchestrator -->
+  <circle cx="128" cy="128" r="36" fill="#0D1117" stroke="url(#g)" stroke-width="2.5" filter="url(#glow)"/>
+  <circle cx="128" cy="128" r="20" fill="url(#g)" filter="url(#glow)"/>
+  <text x="128" y="134" text-anchor="middle" fill="#0A0E14" font-family="monospace" font-size="16" font-weight="bold">CS</text>
+</svg>

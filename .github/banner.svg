@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="280" viewBox="0 0 880 280" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="880" y2="280" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A0E14"/>
+      <stop offset="1" stop-color="#0D1117"/>
+    </linearGradient>
+    <linearGradient id="cyber" x1="200" y1="70" x2="520" y2="70" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00D9FF"/>
+      <stop offset="0.5" stop-color="#00FF9D"/>
+      <stop offset="1" stop-color="#A855F7"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <!-- background -->
+  <rect width="880" height="280" rx="16" fill="url(#bg)"/>
+  <!-- grid dots -->
+  <g opacity="0.06" fill="#fff">
+    <circle cx="40" cy="40" r="1.5"/><circle cx="80" cy="40" r="1.5"/><circle cx="120" cy="40" r="1.5"/>
+    <circle cx="40" cy="80" r="1.5"/><circle cx="80" cy="80" r="1.5"/><circle cx="120" cy="80" r="1.5"/>
+    <circle cx="40" cy="240" r="1.5"/><circle cx="80" cy="240" r="1.5"/><circle cx="840" cy="40" r="1.5"/>
+    <circle cx="800" cy="240" r="1.5"/><circle cx="840" cy="240" r="1.5"/>
+  </g>
+  <!-- central orchestrator node -->
+  <g transform="translate(140,140)">
+    <circle r="44" fill="none" stroke="#00D9FF" stroke-width="2.5" opacity="0.3"/>
+    <circle r="30" fill="#0D1117" stroke="#00D9FF" stroke-width="2" filter="url(#glow)"/>
+    <circle r="14" fill="url(#cyber)" filter="url(#glow)"/>
+    <text x="0" y="4" text-anchor="middle" fill="#0A0E14" font-family="monospace" font-size="13" font-weight="bold">AI</text>
+  </g>
+  <!-- connection lines to sub-agents -->
+  <g stroke="#00D9FF" stroke-width="1.2" opacity="0.25">
+    <line x1="170" y1="115" x2="360" y2="65"/><line x1="175" y1="130" x2="380" y2="130"/>
+    <line x1="170" y1="165" x2="360" y2="200"/><line x1="170" y1="100" x2="320" y2="30"/>
+    <line x1="175" y1="155" x2="340" y2="240"/><line x1="160" y1="180" x2="280" y2="250"/>
+  </g>
+  <!-- sub-agent nodes -->
+  <g font-family="monospace" font-size="9" fill="#8B949E" text-anchor="middle">
+    <g transform="translate(360,65)"><circle r="16" fill="#0D1117" stroke="#00FF9D" stroke-width="1.5"/><text y="3" font-size="13">📶</text><text y="36">recon</text></g>
+    <g transform="translate(380,130)"><circle r="16" fill="#0D1117" stroke="#FF6B6B" stroke-width="1.5"/><text y="3" font-size="13">🐍</text><text y="36">exploit</text></g>
+    <g transform="translate(360,200)"><circle r="16" fill="#0D1117" stroke="#A855F7" stroke-width="1.5"/><text y="3" font-size="13">🧊</text><text y="36">ghost</text></g>
+    <g transform="translate(320,30)"><circle r="16" fill="#0D1117" stroke="#FBBF24" stroke-width="1.5"/><text y="3" font-size="13">🔌</text><text y="-26">hardware</text></g>
+    <g transform="translate(340,240)"><circle r="16" fill="#0D1117" stroke="#00D9FF" stroke-width="1.5"/><text y="3" font-size="13">👶</text><text y="36">smith</text></g>
+  </g>
+  <!-- title -->
+  <text x="470" y="105" fill="url(#cyber)" font-family="system-ui,-apple-system,sans-serif" font-size="52" font-weight="800" letter-spacing="-1">cyberspace</text>
+  <!-- tagline -->
+  <text x="475" y="140" fill="#C9D1D9" font-family="system-ui,-apple-system,sans-serif" font-size="15" font-weight="500">A swarm of AI agents that pentests everything you own —</text>
+  <text x="475" y="162" fill="#C9D1D9" font-family="system-ui,-apple-system,sans-serif" font-size="15" font-weight="500">networks, web apps, dark web, WiFi hardware, and itself.</text>
+  <!-- badges -->
+  <g font-family="monospace" font-size="11" transform="translate(475,195)">
+    <rect width="120" height="22" rx="11" fill="#21262D" stroke="#30363D"/><text x="60" y="15" text-anchor="middle" fill="#00FF9D">6 AGENTS</text>
+    <rect x="128" width="120" height="22" rx="11" fill="#21262D" stroke="#30363D"/><text x="188" y="15" text-anchor="middle" fill="#00D9FF">40 TOOLS</text>
+    <rect x="256" width="80" height="22" rx="11" fill="#21262D" stroke="#30363D"/><text x="296" y="15" text-anchor="middle" fill="#A855F7">v0.5.0</text>
+  </g>
+  <!-- footer -->
+  <text x="475" y="245" fill="#484F58" font-family="monospace" font-size="11">$ cyberspace swarm  # command the team</text>
+</svg>

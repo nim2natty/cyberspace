@@ -79,9 +79,61 @@ def agent():
 
 @app.command()
 def dashboard():
-    """cyberspace unified dashboard + one-AI control plane."""
+    """The multi-agent swarm hub (default). Command the whole team from one space."""
     from .ui.dashboard import interactive
     interactive()
+
+
+@app.command()
+def swarm(roe: str = typer.Option("", "--roe", help="path to a Rules of Engagement .md file")):
+    """Launch the multi-agent swarm directly. The Orchestrator commands the team."""
+    from .ui.dashboard import run_swarm
+    if roe:
+        from pathlib import Path
+        p = Path(roe)
+        if p.exists():
+            console.print(f"[dim]loaded RoE from {roe}[/dim]")
+            from . import memory
+            memory.semantic_fact("roe_file", str(p))
+    run_swarm()
+
+
+@app.command()
+def quickstart():
+    """One-command guided first run: configure agent, then launch the swarm."""
+    console.print(Panel.fit(
+        "[bold cyan]cyberspace quickstart[/bold cyan]\n"
+        "[dim]Let's get you running in 60 seconds.[/dim]", border_style="cyan"))
+    from .agent.config import is_configured
+    if not is_configured():
+        console.print("[yellow]Step 1:[/yellow] configure the agent (needed first).")
+        from .agent.setup import run_wizard
+        run_wizard(force=True)
+    else:
+        console.print("[green]Agent already configured. Skipping to the swarm.[/green]")
+    console.print("\n[yellow]Step 2:[/yellow] launch the multi-agent swarm.")
+    from .ui.dashboard import run_swarm
+    run_swarm()
+
+
+@app.command()
+def report(outfile: str = typer.Option("engagement_report.md", "--out", "-o")):
+    """Generate a markdown engagement report from memory + activity history."""
+    from . import memory as mem
+    from pathlib import Path
+    episodes = mem.recent_episodes(100)
+    profile = mem.load_profile()
+    lines = ["# Engagement Report", "", f"Generated: {__import__('datetime').datetime.now().isoformat()}", ""]
+    lines.append(f"## Operator profile\nSkill: {profile.skill_level}; "
+                 f"tools used: {', '.join(profile.preferred_tools[:8]) or 'none'}")
+    lines.append(f"\n## Activity log ({len(episodes)} actions)\n")
+    lines.append("| time | agent | action | result |")
+    lines.append("|------|-------|--------|--------|")
+    for ep in episodes:
+        lines.append(f"| {ep.get('ts','')[:19]} | {ep.get('platform','')} | "
+                     f"{ep.get('action','')} | {ep.get('result_summary','')[:60].replace('|','/')} |")
+    Path(outfile).write_text("\n".join(lines))
+    console.print(f"[green]Report written to[/green] {outfile} ({len(episodes)} actions)")
 
 
 @app.command()
