@@ -1,17 +1,17 @@
-"""Training plan + cost/time estimation for TrainABaby.
+"""Training plan + cost/time estimation for RoboDaddy.
 
 A TrainingPlan bundles every decision needed to fine-tune: base model, dataset,
-GPU, method, epochs, and derived cost/time estimates. This is what `trainababy
-plan` produces and `trainababy train` consumes.
+GPU, method, epochs, and derived cost/time estimates. This is what `robodaddy
+plan` produces and `robodaddy train` consumes.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 
-from .datasets import datasets_for
+from .datasets import dataset_by_id, datasets_for
 from .gpus import GPUS, estimate_cost, best_value_gpu
-from .presets import BASE_MODELS, preset_for
+from .presets import BASE_MODELS, preset_for, resolve_use_case
 
 
 @dataclass
@@ -48,7 +48,7 @@ def _hours_for(model_b: int, samples: int, epochs: int, seq_len: int,
     Empirical rule of thumb: throughput ~ (base_TPS / model_b) * seq_factor.
     Calibrated so a 7B QLoRA on 1x4090 does ~50k 2k-token samples/epoch in ~6h.
     """
-    base_tps = 1200.0                                   # tokens/sec reference
+    base_tps = 36000.0                                  # tokens/sec reference
     seq_factor = 2048.0 / max(seq_len, 512)
     tps = (base_tps / max(model_b, 1)) * seq_factor * num_gpus * 0.9
     total_tokens = samples * epochs * seq_len
@@ -60,6 +60,7 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
                dataset_id: Optional[str] = None, gpu: Optional[str] = None,
                days: int = 1, num_gpus: int = 1, epochs: int = 3) -> TrainingPlan:
     """Construct a plan from a use case + overrides, with cost/time estimates."""
+    use_case = resolve_use_case(use_case)
     preset = preset_for(use_case)
     base = base_model or preset["base"]
     if base not in BASE_MODELS:
@@ -82,6 +83,15 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
 
     notes = []
     notes.append(f"base model {base} ({bparams}B params)")
+    dataset_meta = dataset_by_id(ds)
+    if dataset_meta:
+        notes.append(
+            f"dataset {ds} ({dataset_meta.get('schema', 'unknown')} schema, "
+            f"{dataset_meta.get('license', 'unknown')} license, "
+            f"{dataset_meta.get('access', 'unknown')} access)"
+        )
+        if dataset_meta.get("access") != "public":
+            notes.append("dataset requires accepting Hugging Face terms and setting HF_TOKEN before a real run.")
     notes.append(f"{preset['method']} on {num_gpus}x {chosen_gpu} ({GPUS[chosen_gpu]['vram_gb']}GB VRAM)")
     if GPUS[chosen_gpu]["qlora_max_b"] < bparams and preset["method"] == "qlora":
         notes.append(f"WARNING: {chosen_gpu} VRAM may be tight for {bparams}B QLoRA - "
@@ -90,7 +100,8 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
         notes.append("long run - watch for preempted spot instances; checkpoint often.")
 
     return TrainingPlan(
-        name=f"{base}-{use_case}-d{days}", use_case=use_case, base_model=base,
+        name=f"{_safe_name(base)}-{_safe_name(use_case)}-d{days}",
+        use_case=use_case, base_model=base,
         dataset_id=ds, method=preset["method"], gpu=chosen_gpu, num_gpus=num_gpus,
         epochs=epochs, days=days, samples=samples, hours=hours,
         cost_low=low, cost_mid=mid, cost_high=high, notes=notes,
@@ -102,6 +113,12 @@ def _dataset_size_hint(dataset_id: str) -> int:
     id_low = dataset_id.lower()
     if "ultrachat" in id_low or "openorca" in id_low or "openhermes" in id_low:
         return 200000
+    if "magicoder" in id_low or "evol-instruct-code" in id_low:
+        return 80000
+    if "primus-reasoning" in id_low:
+        return 5000
+    if "primus-instruct" in id_low:
+        return 5000
     if "alpaca" in id_low or "dolly" in id_low:
         return 52000
     if "platypus" in id_low:
@@ -109,3 +126,11 @@ def _dataset_size_hint(dataset_id: str) -> int:
     if "github-code" in id_low:
         return 100000
     return 50000
+
+
+def _safe_name(value: str) -> str:
+    keep = [c.lower() if c.isalnum() else "-" for c in value]
+    name = "".join(keep).strip("-")
+    while "--" in name:
+        name = name.replace("--", "-")
+    return name or "model"

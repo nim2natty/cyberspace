@@ -1,9 +1,7 @@
-"""GPU catalog for TrainABaby - what hardware can train what.
+"""GPU catalog for RoboDaddy - rough capacity and planning prices.
 
-Realistic VRAM + QLoRA/LoRA capacity + typical $/hr on spot markets (Vast.ai and
-similar). Prices are rough, late-2025 ranges; the live `instances` command quotes
-actual current offers. LPU (Groq) is inference-only so it's a SERVING target, not
-a training target.
+The static price ranges are only for cost estimates. Use `robodaddy instances`
+for live Vast.ai offers before spending money.
 """
 from __future__ import annotations
 

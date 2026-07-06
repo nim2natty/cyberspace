@@ -23,7 +23,7 @@ def _banner() -> None:
     console.print(Panel.fit(
         "[bold cyan]cyberbot[/bold cyan] — agent setup\n"
         "[dim]Configure your personal pentest agent first. Every platform "
-        "(IceBerg, AirBender, ShadowDragon, StickEm) plugs into this agent, "
+        "(IceBerg, AirBender, ShadowDragon, StickEm, RoboDaddy) plugs into this agent, "
         "so this step unlocks all agentic features.[/dim]",
         border_style="cyan",
     ))

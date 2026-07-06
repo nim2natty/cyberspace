@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cyberspace"
 version = "0.5.0"
-description = "cyberspace - an open-source agentic pentest platform for learners and pros"
+description = "cyberspace - an agentic security lab platform with scoped tool agents"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"

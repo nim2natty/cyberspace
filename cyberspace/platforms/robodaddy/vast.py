@@ -1,4 +1,4 @@
-"""Real Vast.ai API client for TrainABaby.
+"""Real Vast.ai API client for RoboDaddy.
 
 Vast.ai exposes a REST API at https://console.vast.ai/api/v0 (Bearer auth).
 This client implements the instance lifecycle used by training:
@@ -99,7 +99,7 @@ class VastClient:
             raise RuntimeError("renting needs VAST_API_KEY (https://cloud.vast.ai/account/settings/)")
         body = {
             "client_id": "me", "image": image, "disk": float(disk_gb),
-            "label": "trainababy", "onstart": onstart,
+            "label": "robodaddy", "onstart": onstart,
             "runtype": "ssh", "python_utf8": True, "lang_utf8": True,
             "use_ssh_proxy": False, "force": False,
         }

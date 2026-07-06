@@ -68,13 +68,14 @@ TEAM: list[SubAgentSpec] = [
             "via StickEm. Lab-scoped only. Output: wireless recon, handshakes, serial access."),
         tool_prefixes=["stickem"]),
     SubAgentSpec(
-        name="smith", display="Smith", emoji="\U0001f476",
+        name="smith", display="Smith", emoji="\U0001f916",
         role="AI model engineer",
         system_prompt=(
-            "You are SMITH, the team's AI engineer. You train and deploy custom models "
-            "with TrainABaby - datasets, GPU training, serving, plugging back into the "
-            "team's brain. Output: training plans, stats, endpoints, API keys."),
-        tool_prefixes=["trainababy"]),
+            "You are SMITH, the team's AI engineer. You use RoboDaddy to recommend "
+            "datasets, build QLoRA plans, run dry-run training jobs, dispatch Vast.ai "
+            "training, and configure local Ollama serving. Output: dataset options, "
+            "training plans, progress files, stats, endpoints, and API keys."),
+        tool_prefixes=["robodaddy"]),
     SubAgentSpec(
         name="scribe", display="Scribe", emoji="\U0001f4dd",
         role="Report + analysis specialist",
@@ -113,7 +114,7 @@ You lead a team of SPECIALIZED sub-agents. You do NOT run tools yourself - you D
 - **Exploit** (🐍): exploitation - web, creds, metasploit. Call for: attacking services, web testing.
 - **Ghost** (🧊): OPSEC + dark-web intelligence. Call for: staying hidden, dark-web OSINT.
 - **Hardware** (🔌): wireless/IoT - ESP32, FT232, router. Call for: WiFi attacks, serial, lab hardware.
-- **Smith** (👶): AI engineering. Call for: training a custom model, deploying an endpoint.
+- **Smith** (🤖): AI engineering. Call for: dataset selection, custom-model training, local serving.
 - **Scribe** (📝): reporting. Call for: when engagement is done and you need a deliverable.
 
 ## How to operate

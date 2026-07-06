@@ -1,21 +1,23 @@
-"""CLI for TrainABaby.
+"""CLI for RoboDaddy.
 
-  cyberspace trainababy <command>:
+  cyberspace robodaddy <command>:
 
   usecases   browse use-case presets (offensive, defensive, assistant, ...)
-  datasets   browse public training datasets (by use case)
+  datasets   browse public training datasets for a model request
   gpus       browse GPU hardware + what each can train
   providers  browse GPU-rental marketplaces
   instances  search LIVE Vast.ai GPU offers (real prices, no key needed to browse)
   plan       interactive wizard: usecase -> data -> GPU -> days -> cost estimate
-  train      run the fine-tune job (dry-run with stats, or rent a real GPU)
+  train      run one or more fine-tune jobs (dry-run with stats, or Vast.ai)
   jobs       list training jobs + statistics (loss, samples, $, hours)
   models     registry of trained models
-  serve      deploy a model behind an OpenAI-compatible endpoint + API key
+  serve      write a local Ollama Modelfile and API-key record
   keys       manage API keys for served models
   use        set a trained+served model as cyberbot's active LLM
 """
 from __future__ import annotations
+
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -23,16 +25,16 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from .datasets import all_datasets, datasets_for
-from .gpus import GPUS, best_value_gpu, estimate_cost, gpus_for_model
+from .datasets import recommend_datasets
+from .gpus import GPUS, best_value_gpu, gpus_for_model
 from .plan import build_plan
-from .presets import BASE_MODELS, PRESETS, match_preset, preset_for
+from .presets import BASE_MODELS, PRESETS, preset_for, resolve_use_case
 from .providers import PROVIDERS
-from .registry import (list_keys, list_models, revoke_key)
+from .registry import list_keys, list_models
 
 
-def build_trainababy_cli(console: Console) -> typer.Typer:
-    app = typer.Typer(help="TrainABaby: train your own personalized AI model.")
+def build_robodaddy_cli(console: Console) -> typer.Typer:
+    app = typer.Typer(help="RoboDaddy: plan, dry-run, and dispatch model fine-tunes.")
 
     @app.command("usecases")
     def usecases():
@@ -43,13 +45,27 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
         console.print(t)
 
     @app.command("datasets")
-    def datasets(use_case: str = typer.Option("general", "-u", "--use-case")):
-        """Show public training datasets for a use case."""
-        for d in datasets_for(use_case):
-            console.print(Panel.fit(
-                f"[bold]{d['name']}[/bold]  [dim]{d['id']}[/dim]\n"
-                f"size: {d['size']}   license: {d['license']}\n{d['note']}",
-                border_style="blue"))
+    def datasets(
+        request: str = typer.Argument("", help="what you want the model to do"),
+        use_case: str = typer.Option("", "-u", "--use-case", help="explicit use-case key"),
+        limit: int = typer.Option(0, "--limit", help="max rows; 0 shows all"),
+    ):
+        """Show dataset recommendations for a model request."""
+        rec = recommend_datasets(request, use_case=use_case, limit=limit)
+        console.print(f"[green]matched use case:[/green] {rec['label']}  [dim]({rec['use_case']})[/dim]")
+        console.print(f"[dim]recommended base: {rec['base_model']}   method: {rec['method']}[/dim]\n")
+        t = Table("#", "dataset", "HF repo", "size", "license/access", "schema")
+        for i, d in enumerate(rec["datasets"]):
+            access = d.get("access", "-")
+            t.add_row(str(i), d["name"], d["id"], d["size"],
+                      f"{d['license']} / {access}", d.get("schema", "-"))
+        console.print(t)
+        console.print("\n[bold]recommendation notes[/bold]")
+        for i, d in enumerate(rec["datasets"]):
+            marker = "recommended" if i == 0 else "candidate"
+            console.print(f"  [{i}] {marker}: {d['id']} - {d['note']}")
+        hint = request or rec["use_case"]
+        console.print(f"\n[dim]plan it: cyberspace robodaddy plan \"{hint}\"[/dim]")
 
     @app.command("gpus")
     def gpus():
@@ -100,7 +116,7 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
                       f"{o.dlperf:.0f}", f"{o.disk_space:.0f}",
                       f"{o.reliability:.2f}", o.geolocation)
         console.print(t)
-        console.print(f"\n[dim]Rent one with: cyberspace trainababy train <name> "
+        console.print(f"\n[dim]Rent one with: cyberspace robodaddy train <use-case> "
                       f"--provider vastai --offer {offers[0].id}[/dim]")
 
     # --- interactive plan wizard -----------------------------------------
@@ -110,7 +126,7 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
         if not prompt_text:
             prompt_text = Prompt.ask("What do you want your AI to do?",
                 default="offensive pen security")
-        uc = match_preset(prompt_text)
+        uc = resolve_use_case(prompt_text)
         preset = preset_for(uc)
         console.print(f"[green]matched use case:[/green] {preset['label']}  [dim]({uc})[/dim]")
 
@@ -122,10 +138,14 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
         base = Prompt.ask("Base model", default=preset["base"])
 
         # dataset
-        ds = datasets_for(preset["datasets"])
-        console.print("\nDatasets:")
+        ds = recommend_datasets(prompt_text, use_case=uc)["datasets"]
+        console.print("\nDataset recommendations:")
         for i, d in enumerate(ds):
-            console.print(f"  [{i}] {d['name']}  [dim]({d['id']})[/dim]  {d['size']}")
+            mark = " <-- recommended" if i == 0 else ""
+            console.print(
+                f"  [{i}] {d['name']}  [dim]({d['id']})[/dim]  {d['size']}  "
+                f"{d.get('license', 'unknown')}  {d.get('access', 'unknown')}{mark}"
+            )
         di = int(Prompt.ask("Dataset #", default="0", choices=[str(i) for i in range(len(ds))]))
         dataset_id = ds[di]["id"]
 
@@ -149,12 +169,12 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
             f"est. time: {p.hours}h   est. cost: ${p.cost_low:.2f}-${p.cost_high:.2f}\n"
             + ("\n".join("  " + n for n in p.notes)),
             title="training plan", border_style="cyan"))
-        console.print(f"\n[dim]train it: cyberspace trainababy train {uc} "
+        console.print(f"\n[dim]train it: cyberspace robodaddy train {uc} "
                       f"--base {base} --gpu {gpu} --days {days}[/dim]")
 
     # --- train -----------------------------------------------------------
     @app.command("train")
-    def train(use_case: str = typer.Argument(..., help="use-case key (see usecases)"),
+    def train(use_cases: list[str] = typer.Argument(..., help="one or more use-case keys or requests"),
               base: str = typer.Option("", "--base", "-b"),
               dataset: str = typer.Option("", "--dataset", "-d"),
               gpu: str = typer.Option("", "--gpu", "-g"),
@@ -162,30 +182,59 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
               num_gpus: int = typer.Option(1, "--num-gpus"),
               epochs: int = typer.Option(3, "--epochs"),
               provider: str = typer.Option("dry-run", "--provider", "-p",
-                                          help="dry-run|vastai|local"),
-              offer: int = typer.Option(0, "--offer", help="Vast.ai offer id to rent")):
-        """Run the fine-tune job. Dry-run (simulated stats) by default."""
-        p = build_plan(use_case, base_model=(base or None), dataset_id=(dataset or None),
+                                          help="dry-run|vastai"),
+              offer: Optional[list[int]] = typer.Option(
+                  None, "--offer", help="Vast.ai offer id; repeat once per model for batches")):
+        """Run one or more fine-tune jobs. Dry-run is simulated and concurrent."""
+        if provider not in ("dry-run", "vastai"):
+            console.print("[red]provider must be dry-run or vastai[/red]")
+            raise typer.Exit(1)
+        plans = [
+            build_plan(use_case, base_model=(base or None), dataset_id=(dataset or None),
                        gpu=(gpu or None), days=days, num_gpus=num_gpus, epochs=epochs)
+            for use_case in use_cases
+        ]
         dry = provider == "dry-run"
-        if provider == "vastai" and offer:
-            console.print(f"[yellow]WARNING: will rent Vast.ai offer #{offer} "
-                          f"(~${p.cost_mid:.2f}). Proceed?[/yellow]")
-            if not Confirm.ask("Rent GPU + train?", default=False):
+        offer_ids = list(offer or [])
+        if provider == "vastai":
+            if len(offer_ids) != len(plans):
+                console.print("[red]Vast.ai training needs one --offer value per model.[/red]\n"
+                              "[dim]Find offers with: cyberspace robodaddy instances[/dim]")
+                raise typer.Exit(1)
+            total_mid = sum(p.cost_mid for p in plans)
+            console.print(f"[yellow]WARNING: will rent {len(plans)} Vast.ai offer(s) "
+                          f"(estimated mid cost ${total_mid:.2f}). Proceed?[/yellow]")
+            if not Confirm.ask("Rent GPU(s) + train?", default=False):
                 raise typer.Exit(0)
 
         def on_event(stage, msg):
             console.print(f"[dim]{stage:>8}[/dim]  {msg}")
-        from .train import run_training
-        m = run_training(p, dry_run=dry, vast_offer_id=(offer or None), on_event=on_event)
-        console.print(Panel.fit(
-            f"[green]model:[/green] {m.name}  status: {m.status}\n"
-            f"end_loss: {m.stats.get('end_loss','n/a')}   "
-            f"samples: {m.stats.get('samples_trained','n/a')}   "
-            f"hours: {m.stats.get('hours','n/a')}",
-            border_style="green" if m.status == "trained" else "yellow"))
-        if m.status == "trained":
-            console.print(f"[dim]serve it: cyberspace trainababy serve {m.name}[/dim]")
+
+        def on_batch(job, stage, msg):
+            console.print(f"[dim]{job} {stage:>8}[/dim]  {msg}")
+
+        if len(plans) == 1:
+            from .train import run_training
+            models = [run_training(plans[0], dry_run=dry,
+                                   vast_offer_id=(offer_ids[0] if offer_ids else None),
+                                   on_event=on_event)]
+        else:
+            console.print(f"[dim]starting {len(plans)} training jobs concurrently[/dim]")
+            from .train import run_training_batch
+            models = run_training_batch(plans, dry_run=dry, vast_offer_ids=offer_ids,
+                                        on_event=on_batch)
+
+        for m in models:
+            console.print(Panel.fit(
+                f"[green]model:[/green] {m.name}  status: {m.status}\n"
+                f"end_loss: {m.stats.get('end_loss','n/a')}   "
+                f"samples: {m.stats.get('samples_trained','n/a')}   "
+                f"hours: {m.stats.get('hours','n/a')}\n"
+                f"progress: {m.stats.get('progress_file','n/a')}\n"
+                f"vast: {m.stats.get('vast_console_url','n/a')}",
+                border_style="green" if m.status == "trained" else "yellow"))
+            if m.status == "trained":
+                console.print(f"[dim]serve it: cyberspace robodaddy serve {m.name}[/dim]")
 
     # --- jobs + models ---------------------------------------------------
     @app.command("jobs")
@@ -193,13 +242,14 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
         """List training jobs + their statistics."""
         models = list_models()
         if not models:
-            console.print("[dim]no jobs yet. Run: cyberspace trainababy plan[/dim]"); return
-        t = Table("model", "status", "base", "end_loss", "samples", "hours", "$mid")
+            console.print("[dim]no jobs yet. Run: cyberspace robodaddy plan[/dim]"); return
+        t = Table("model", "status", "base", "end_loss", "samples", "hours", "$mid", "progress")
         for m in models:
             s = m.stats
             t.add_row(m.name, m.status, m.base_model,
                       str(s.get("end_loss", "-")), str(s.get("samples_trained", "-")),
-                      str(s.get("hours", "-")), str(s.get("cost_mid", "-")))
+                      str(s.get("hours", "-")), str(s.get("cost_mid", "-")),
+                      str(s.get("progress_file", "-")))
         console.print(t)
 
     @app.command("models")
@@ -216,9 +266,9 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
     @app.command("serve")
     def serve(model_name: str = typer.Argument(...),
               target: str = typer.Option("ollama", "--target", "-t",
-                                         help="ollama|vastai|groq_lpu"),
+                                         help="ollama"),
               port: int = typer.Option(11435, "--port")):
-        """Deploy a trained model behind an OpenAI-compatible endpoint + key."""
+        """Write a local Ollama Modelfile and API-key record."""
         from .serve import serve as do_serve
         def on_event(stage, msg):
             console.print(f"[dim]{stage:>8}[/dim]  {msg}")
@@ -229,9 +279,9 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
         console.print(Panel.fit(
             f"[green]served:[/green] {m.name}\n"
             f"endpoint: {m.endpoint}\n"
-            f"api key:  {key[:24]}...  [dim](full: trainababy keys)[/dim]",
+            f"api key:  {key[:24]}...  [dim](full: robodaddy keys)[/dim]",
             border_style="green"))
-        console.print(f"[dim]use it: cyberspace trainababy use {m.name}[/dim]")
+        console.print(f"[dim]use it: cyberspace robodaddy use {m.name}[/dim]")
 
     @app.command("keys")
     def keys():
@@ -259,5 +309,3 @@ def build_trainababy_cli(console: Console) -> typer.Typer:
         console.print("[dim]test it: cyberspace agent[/dim]")
 
     return app
-
-

@@ -1,10 +1,10 @@
-"""Model registry + API-key management for TrainABaby.
+"""Model registry + API-key management for RoboDaddy.
 
 Each trained model gets a record (base, dataset, stats, status). When served, it
 gets an OpenAI-compatible endpoint + key so it can be plugged back into cyberbot
 via `cyberspace iceberg model provider custom --base-url ... --api-key ...`.
 
-Persisted to ~/.cyberspace/modules/trainababy/.
+Persisted to ~/.cyberspace/modules/robodaddy/.
 """
 from __future__ import annotations
 
@@ -13,13 +13,15 @@ import secrets
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from pathlib import Path
+from threading import RLock
 from typing import Optional
 
 from ...config import MODULES_DIR, ensure_dirs
 
-T_DIR = MODULES_DIR / "trainababy"
+T_DIR = MODULES_DIR / "robodaddy"
 MODELS_FILE = T_DIR / "models.json"
 KEYS_FILE = T_DIR / "keys.json"
+_LOCK = RLock()
 
 
 @dataclass
@@ -62,52 +64,58 @@ def _save(path: Path, data: list) -> None:
 
 
 def list_models() -> list[TrainedModel]:
-    return [TrainedModel(**{k: m[k] for k in TrainedModel.__dataclass_fields__ if k in m})
-            for m in _load(MODELS_FILE)]
+    with _LOCK:
+        return [TrainedModel(**{k: m[k] for k in TrainedModel.__dataclass_fields__ if k in m})
+                for m in _load(MODELS_FILE)]
 
 
 def get_model(name: str) -> Optional[TrainedModel]:
-    for m in list_models():
-        if m.name == name:
-            return m
+    with _LOCK:
+        for m in list_models():
+            if m.name == name:
+                return m
     return None
 
 
 def upsert_model(model: TrainedModel) -> None:
-    models = _load(MODELS_FILE)
-    models = [m for m in models if m.get("name") != model.name]
-    models.append(asdict(model))
-    _save(MODELS_FILE, models)
+    with _LOCK:
+        models = _load(MODELS_FILE)
+        models = [m for m in models if m.get("name") != model.name]
+        models.append(asdict(model))
+        _save(MODELS_FILE, models)
 
 
 def list_keys() -> list[ApiKey]:
-    return [ApiKey(**{k: k2[k] for k in ApiKey.__dataclass_fields__ if k in k2})
-            for k2 in _load(KEYS_FILE)]
+    with _LOCK:
+        return [ApiKey(**{k: k2[k] for k in ApiKey.__dataclass_fields__ if k in k2})
+                for k2 in _load(KEYS_FILE)]
 
 
 def issue_key(model_name: str, endpoint: str, note: str = "") -> ApiKey:
     """Generate a new API key for a served model and persist it."""
-    key = ApiKey(
-        key=f"tab_" + secrets.token_urlsafe(32),
-        model_name=model_name, endpoint=endpoint,
-        created=datetime.now().isoformat(), note=note,
-    )
-    keys = _load(KEYS_FILE)
-    keys.append(asdict(key))
-    _save(KEYS_FILE, keys)
-    # Mark the model served.
-    m = get_model(model_name)
-    if m:
-        m.status = "served"
-        m.endpoint = endpoint
-        m.served_model_name = model_name
-        upsert_model(m)
-    return key
+    with _LOCK:
+        key = ApiKey(
+            key=f"rbd_" + secrets.token_urlsafe(32),
+            model_name=model_name, endpoint=endpoint,
+            created=datetime.now().isoformat(), note=note,
+        )
+        keys = _load(KEYS_FILE)
+        keys.append(asdict(key))
+        _save(KEYS_FILE, keys)
+        # Mark the model served.
+        m = get_model(model_name)
+        if m:
+            m.status = "served"
+            m.endpoint = endpoint
+            m.served_model_name = model_name
+            upsert_model(m)
+        return key
 
 
 def revoke_key(key_prefix: str) -> int:
-    keys = _load(KEYS_FILE)
-    before = len(keys)
-    keys = [k for k in keys if not k["key"].startswith(key_prefix)]
-    _save(KEYS_FILE, keys)
-    return before - len(keys)
+    with _LOCK:
+        keys = _load(KEYS_FILE)
+        before = len(keys)
+        keys = [k for k in keys if not k["key"].startswith(key_prefix)]
+        _save(KEYS_FILE, keys)
+        return before - len(keys)

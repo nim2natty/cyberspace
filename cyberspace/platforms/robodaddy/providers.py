@@ -1,8 +1,7 @@
-"""GPU-rental marketplaces TrainABaby can drive.
+"""GPU-rental marketplace records for RoboDaddy.
 
-Vast.ai is the primary integration (real REST API at console.vast.ai/api/v0).
-RunPod / Lambda / local are supported as provider records so the plan/serve steps
-can target them; the live `instances` search is implemented for Vast.ai.
+Vast.ai is the implemented live integration. Other providers are listed as
+planning metadata until lifecycle clients are added.
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ PROVIDERS = {
         "api_base": "https://api.runpod.io/v2",
         "auth": "header Authorization: Bearer $RUNPOD_API_KEY",
         "key_url": "https://www.runpod.io/console/user/settings",
-        "note": "Serverless + pod GPUs. Good for both training and serving.",
+        "note": "Provider metadata only; lifecycle automation is not implemented.",
         "live": False,
     },
     "lambda": {
@@ -28,7 +27,7 @@ PROVIDERS = {
         "api_base": "https://cloud.lambdalabs.com/api/v1",
         "auth": "header Authorization: Bearer $LAMBDA_API_KEY",
         "key_url": "https://cloud.lambdalabs.com/api-keys",
-        "note": "Stable H100/A100 clusters. Higher reliability, higher price.",
+        "note": "Provider metadata only; lifecycle automation is not implemented.",
         "live": False,
     },
     "local": {
@@ -36,7 +35,7 @@ PROVIDERS = {
         "api_base": "",
         "auth": "none",
         "key_url": "",
-        "note": "Run on this machine if you have a capable GPU (nvidia-smi).",
+        "note": "Provider metadata only; generated job files can be run manually.",
         "live": False,
     },
 }

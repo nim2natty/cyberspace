@@ -12,14 +12,14 @@
 FROM kalilinux/kali-rolling:latest
 
 LABEL org.opencontainers.image.title="cyberspace" \
-      org.opencontainers.image.description="Open-source agentic pentest platform" \
+      org.opencontainers.image.description="Agentic security lab platform with scoped tool agents" \
       org.opencontainers.image.source="https://github.com/nim2natty/cyberspace"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Core tooling (the "all major kali tools" baseline) + python + opsec.
+# Selected Kali tools used by the built-in platform wrappers, plus Python and OPSEC utilities.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip python3-venv git curl ca-certificates \
       nmap masscan sqlmap gobuster whatweb \

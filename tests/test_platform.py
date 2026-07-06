@@ -1,6 +1,6 @@
 """End-to-end verification of the cyberspace platform.
 
-Confirms: module discovery loads all 4 platforms, all 15 tools register, tools
+Confirms: module discovery loads all built-in platforms, agent tools register, tools
 are callable, and the module/agent wiring is correct.
 """
 import sys
@@ -12,15 +12,15 @@ def main():
 
     loaded = discover_and_load()
     assert loaded, "no modules loaded"
-    expected = {"iceberg", "airbender", "shadowdragon", "stickem", "trainababy"}
+    expected = {"iceberg", "airbender", "shadowdragon", "stickem", "robodaddy"}
     missing = expected - set(loaded)
     assert not missing, f"missing platforms: {missing}"
     print(f"PASS  platforms loaded: {sorted(loaded)}")
 
     # Per-module tool counts. iceberg=5, airbender=6 (expanded super-tool),
-    # shadowdragon=16 (chain+metasploit), stickem=9 (router), trainababy=4 => 40.
+    # shadowdragon=16 (chain+metasploit), stickem=9 (router), robodaddy=5 => 41.
     expected_tools = {"iceberg": 5, "airbender": 6, "shadowdragon": 16,
-                      "stickem": 9, "trainababy": 4}
+                      "stickem": 9, "robodaddy": 5}
     by_mod = {m: len(TOOL_REGISTRY.by_module(m)) for m in expected}
     for mod, n in expected_tools.items():
         assert by_mod.get(mod, 0) == n, \
