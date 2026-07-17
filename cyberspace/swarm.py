@@ -214,6 +214,7 @@ class Swarm:
             if not resp.tool_calls:
                 self.console.print()
                 self.console.print(f"[green]orchestrator>[/green] {resp.text}")
+                self._save_to_project(prompt, resp.text)
                 return resp.text
             for call in resp.tool_calls:
                 if call.name == "swarm.delegate":
@@ -224,3 +225,13 @@ class Swarm:
                 self.messages.append({"role": "tool", "name": call.name, "content": result})
         self.console.print("[yellow](orchestrator reached delegation limit)[/yellow]")
         return ""
+
+    def _save_to_project(self, prompt: str, response: str) -> None:
+        """Auto-save this prompt+response to the active project."""
+        try:
+            from .projects import get_active, add_prompt
+            active = get_active()
+            if active:
+                add_prompt(active, prompt, response, source="swarm")
+        except Exception:
+            pass

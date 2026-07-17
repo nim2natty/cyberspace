@@ -79,6 +79,8 @@ class Agent:
             if not resp.tool_calls:
                 self.console.print()
                 self.console.print(f"[green]cyberbot>[/green] {resp.text}")
+                # Save to the active project if one is set.
+                self._save_to_project(prompt, resp.text)
                 return resp.text
 
             for call in resp.tool_calls:
@@ -91,6 +93,16 @@ class Agent:
 
         self.console.print("[yellow](reached max tool iterations)[/yellow]")
         return ""
+
+    def _save_to_project(self, prompt: str, response: str) -> None:
+        """Auto-save this prompt+response to the active project if one is set."""
+        try:
+            from ..projects import get_active, add_prompt
+            active = get_active()
+            if active:
+                add_prompt(active, prompt, response, source="agent")
+        except Exception:
+            pass
 
     def _assistant_msg(self, resp: AgentResponse) -> dict:
         # Normalize for each provider. OpenAI/Ollama expect tool_calls list;

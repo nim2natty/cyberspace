@@ -388,6 +388,42 @@ cyberspace robodaddy train offensive_pentest --provider vastai --offer 123456
 
 ---
 
+## Projects — save your work by task
+
+Projects let you keep separate prompt histories for different tasks. When a
+project is **active**, every prompt you send to the AI (in `swarm` or `agent`)
+is automatically saved to that project's folder. Later you can open the folder
+and see every prompt you used.
+
+```bash
+# Create a new project (this also makes it active):
+cyberspace project create "surveillance in chicago" --desc "OSINT research"
+
+# Now every prompt you send to the AI gets saved to that project.
+# When you're done, list all your projects:
+cyberspace project list
+
+# Open a project to see all its saved prompts:
+cyberspace project open "surveillance in chicago"
+
+# Switch to a different project:
+cyberspace project use "home lab pentest"
+
+# Check which project is currently active:
+cyberspace project status
+
+# Stop saving prompts (deactivate the current project):
+cyberspace project close
+
+# Delete a project and all its prompts:
+cyberspace project delete "surveillance in chicago"
+```
+
+Projects are stored as folders under `~/.cyberspace/projects/`. Each one has a
+`prompts.jsonl` file with every prompt and the AI's response, timestamped.
+
+---
+
 ## Other useful commands
 
 ```bash

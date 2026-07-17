@@ -178,6 +178,112 @@ def modules():
     console.print(t or "[dim]no modules loaded[/dim]")
 
 
+# --- projects: named workspaces that save every prompt ---------------------
+project_app = typer.Typer(help="Projects: named workspaces that save every prompt you send.")
+app.add_typer(project_app, name="project")
+
+
+@project_app.command("create")
+def project_create(name: str = typer.Argument(..., help="project name, e.g. 'surveillance in chicago'"),
+                   description: str = typer.Option("", "--desc", "-d")):
+    """Create a new project and make it the active one."""
+    from . import projects
+    pdir = projects.create(name, description=description)
+    console.print(f"[green]Created and activated project:[/green] {name}")
+    console.print(f"[dim]Folder: {pdir}[/dim]")
+    console.print(f"[dim]Every prompt you send to the AI will now be saved here.[/dim]")
+
+
+@project_app.command("list")
+def project_list():
+    """Show all your projects and how many prompts each has."""
+    from . import projects
+    active = projects.get_active()
+    projs = projects.list_projects()
+    if not projs:
+        console.print("[dim]No projects yet. Create one: cyberspace project create \"my project\"[/dim]")
+        return
+    t = Table("project", "prompts", "created", "active")
+    for p in projs:
+        mark = "[green]*[/green]" if p["name"] == active else ""
+        t.add_row(p["name"], str(p.get("prompt_count", 0)),
+                  p.get("created", "")[:10], mark)
+    console.print(t)
+    if active:
+        console.print(f"\n[dim]* = active project (prompts are being saved to '{active}')[/dim]")
+
+
+@project_app.command("open")
+def project_open(name: str = typer.Argument(..., help="project name to open")):
+    """Open a project — set it active AND show all saved prompts."""
+    from . import projects
+    p = projects.get(name)
+    if not p:
+        console.print(f"[red]No project named '{name}'.[/red] Run: cyberspace project list")
+        raise typer.Exit(1)
+    projects.set_active(p["name"])
+    console.print(f"[green]Opened project:[/green] {p['name']}")
+    if p.get("description"):
+        console.print(f"[dim]{p['description']}[/dim]")
+    console.print(f"[dim]New prompts will be saved here.[/dim]\n")
+    prompts = projects.get_prompts(p["name"])
+    if not prompts:
+        console.print("[yellow]No prompts saved yet. Start using the AI and they'll appear here.[/yellow]")
+        return
+    console.print(f"[bold]Saved prompts ({len(prompts)}):[/bold]\n")
+    for i, entry in enumerate(prompts, 1):
+        ts = entry.get("ts", "")[:19]
+        console.print(f"[dim]{ts}[/dim]  [cyan]#{i}[/cyan]")
+        console.print(f"  [bold]you:[/bold] {entry.get('prompt', '')[:200]}")
+        resp = entry.get("response", "")
+        if resp:
+            console.print(f"  [dim]AI: {resp[:200]}...[/dim]" if len(resp) > 200 else f"  [dim]AI: {resp}[/dim]")
+        console.print()
+
+
+@project_app.command("use")
+def project_use(name: str = typer.Argument(..., help="project to set as active (saves future prompts)")):
+    """Set a project as active without showing its prompts."""
+    from . import projects
+    p = projects.get(name)
+    if not p:
+        console.print(f"[red]No project named '{name}'.[/red]"); raise typer.Exit(1)
+    projects.set_active(p["name"])
+    console.print(f"[green]Active project:[/green] {p['name']}")
+    console.print(f"[dim]Every prompt you send to the AI will be saved here.[/dim]")
+
+
+@project_app.command("close")
+def project_close():
+    """Stop saving prompts to a project (deactivate)."""
+    from . import projects
+    projects.set_active(None)
+    console.print("[dim]No active project. Prompts will not be saved.[/dim]")
+
+
+@project_app.command("delete")
+def project_delete(name: str = typer.Argument(...)):
+    """Delete a project and all its saved prompts."""
+    from . import projects
+    if projects.delete(name):
+        console.print(f"[green]Deleted project:[/green] {name}")
+    else:
+        console.print(f"[red]No project named '{name}'.[/red]")
+
+
+@project_app.command("status")
+def project_status():
+    """Show which project is active (if any)."""
+    from . import projects
+    active = projects.get_active()
+    if active:
+        console.print(f"[green]Active project:[/green] {active}")
+        prompts = projects.get_prompts(active)
+        console.print(f"[dim]{len(prompts)} prompts saved.[/dim]")
+    else:
+        console.print("[dim]No active project. Create one: cyberspace project create \"my project\"[/dim]")
+
+
 @app.command()
 def tools():
     """List all agent tools across all platforms."""
