@@ -49,7 +49,7 @@ class AirBenderModule(Module):
 
     def register_tools(self, registry: ToolRegistry) -> None:
         reg = registry.register
-        reg(Tool(name="airbender.nmap", description="Run nmap against an authorized target.",
+        reg(Tool(name="airbender.nmap", description="Run nmap against a target.",
                  parameters={"type":"object","properties":{"target":{"type":"string"},
                   "args":{"type":"string","default":"-sV -T4"}},"required":["target"]}, fn=C._tool_nmap))
         reg(Tool(name="airbender.masscan", description="Fast port scan with masscan.",

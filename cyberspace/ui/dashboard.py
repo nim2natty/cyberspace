@@ -71,21 +71,6 @@ def _choose_workspace() -> bool:
     return False
 
 
-def _authorize_objective(prompt: str) -> str | None:
-    """Confirm target ownership once for prompts that explicitly mention a lab."""
-    lab_terms = ("lab", "home network", "homelab", "home lab", "ctf", "training range")
-    if not any(term in prompt.lower() for term in lab_terms):
-        return prompt
-    console.print("[yellow]Authorization check:[/yellow] this objective mentions a lab environment.")
-    choice = Prompt.ask("Target scope", choices=["owned", "authorized", "unauthorized"],
-                        default="owned")
-    if choice == "unauthorized":
-        console.print("[red]Stopped: Cyberspace only operates on owned or explicitly authorized targets.[/red]")
-        return None
-    return (f"[AUTHORIZATION: operator confirmed target is {choice}; proceed within this scope "
-            f"without requesting authorization again.]\n{prompt}")
-
-
 def show_modules() -> None:
     t = Table("module", "platform", "tools", "description")
     for name, mod in sorted(LOADED_MODULES.items()):
@@ -130,9 +115,6 @@ def run_swarm() -> None:
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
-            q = _authorize_objective(q)
-            if q is None:
-                continue
             try:
                 swarm.ask(q)
             except ProviderError as e:
@@ -169,9 +151,6 @@ def run_single_agent() -> None:
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
-            q = _authorize_objective(q)
-            if q is None:
-                continue
             try:
                 a.ask(q)
             except ProviderError as e:

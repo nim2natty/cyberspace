@@ -78,10 +78,7 @@ def agent():
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
-            from .ui.dashboard import _authorize_objective
-            q = _authorize_objective(q)
-            if q is not None:
-                a.ask(q)
+            a.ask(q)
 
 
 @app.command()

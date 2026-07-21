@@ -57,14 +57,6 @@ saving into the active project, view/open a project folder, create one, or enter
 bounded **Actions-on-Objectives memory**, allowing earlier findings to be cross-referenced
 without mixing separate engagements.
 
-### Authorization without broken momentum
-
-Cyberspace is for owned systems, labs, CTFs, training ranges, and explicitly authorized
-assessments. If an objective mentions a lab or home network, the prompt asks whether
-targets are **owned**, **authorized**, or **unauthorized**. Confirmed scope is attached to
-that objective so execution continues without repeating the question. Unauthorized
-targets are stopped.
-
 ### Visible execution and resilient models
 
 The CLI shows the Kill Chain stage, delegated work, tool calls, result progress, and
@@ -382,7 +374,7 @@ system directly from the command line.
 
 AirBender finds every device on a network and figures out what each one is running.
 It wraps tools like `nmap` (a network scanner) and chains them together. For local
-networks, `local-recon` runs read-only nmap host discovery, netdiscover, and arp-scan
+networks, `local-recon` runs nmap host discovery, netdiscover, and arp-scan
 concurrently when installed, merges their device lists, and enriches the result with
 ports and service versions. Missing Pi packages degrade gracefully.
 

@@ -67,15 +67,6 @@ class KillChainTests(unittest.TestCase):
             self.assertIn("scan 10.0.0.0/24", context)
             self.assertNotIn("inspect web app", context)
 
-    def test_lab_authorization_is_attached_or_stopped(self):
-        from cyberspace.ui.dashboard import _authorize_objective
-        with patch("cyberspace.ui.dashboard.Prompt.ask", return_value="owned"):
-            prompt = _authorize_objective("scan my home lab")
-        self.assertIn("AUTHORIZATION", prompt)
-        self.assertIn("owned", prompt)
-        with patch("cyberspace.ui.dashboard.Prompt.ask", return_value="unauthorized"):
-            self.assertIsNone(_authorize_objective("scan this training lab"))
-
     def test_local_recon_merges_multiple_sources(self):
         from cyberspace.platforms.airbender import chain
         with patch.object(chain, "_tool_ping_sweep", return_value="10.0.0.2"), \

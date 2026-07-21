@@ -109,7 +109,7 @@ def _parse_hosts(text: str) -> list[str]:
 
 
 def _tool_local_recon(target="192.168.1.0/24", timeout=90):
-    """Cross-check local hosts with all installed, read-only discovery tools."""
+    """Cross-check local hosts with every installed discovery tool."""
     if clean_target(target): return f"invalid target: {target}"
     probes = {"nmap ping sweep": lambda: _tool_ping_sweep(target, timeout),
               "netdiscover": lambda: _tool_netdiscover(target, timeout),
