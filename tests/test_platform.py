@@ -19,7 +19,7 @@ def main():
 
     # Per-module tool counts. Iceberg includes its full-system privacy audit.
     expected_tools = {"iceberg": 6, "airbender": 6, "shadowdragon": 16,
-                      "stickem": 9, "robodaddy": 5}
+                      "stickem": 9, "robodaddy": 9}
     by_mod = {m: len(TOOL_REGISTRY.by_module(m)) for m in expected}
     for mod, n in expected_tools.items():
         assert by_mod.get(mod, 0) == n, \

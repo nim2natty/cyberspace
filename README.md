@@ -98,6 +98,16 @@ Mullvad, Tor, nmap, and other utilities remain optional host applications. Insta
 the capabilities you need from their official source or operating-system package manager;
 `cyberspace doctor` reports what is available.
 
+Every platform can also run by itself in scoped AI mode. The runtime exposes only that
+platform—or one exact tool—to the configured Cyberspace provider:
+
+```bash
+cyberspace ai iceberg check my privacy posture
+cyberspace ai airbender map my authorized home network
+cyberspace ai robodaddy build a coding assistant
+cyberspace ai robodaddy.plan estimate a cheap support model
+```
+
 > **Windows ARM note:** the standalone CLI, privacy audit, VPN/DNS controls, and browser
 > are supported. The optional Streamlit `iceberg gui` is omitted because its `pyarrow`
 > dependency does not publish a Windows ARM wheel.
@@ -457,17 +467,30 @@ cyberspace stickem router packages
 
 ---
 
-### 5. RoboDaddy 🤖 — building custom AI models
+### 5. RoboDaddy 🤖 — guided AI building and background training
 
-RoboDaddy trains your own AI. You describe what you want it to be good at, it picks
-training data, plans the GPU rental, generates the training script, and can serve
-the finished model back as the brain for the whole system.
+RoboDaddy builds your own AI through one guided flow. Enter a use case, explain your
+intent, and the configured Cyberspace provider ranks bounded live Hugging Face dataset
+results. RoboDaddy shows each option's size, license, access, and schema; automatically
+chooses a compatible base model and best-value GPU; then shows estimated time and price
+before asking whether to launch.
 
 ```bash
-# STEP 1: See what kinds of AI you can build
-cyberspace robodaddy usecases
+cyberspace robodaddy build "coding assistant"
+```
 
-# STEP 2: See what training data is available for your use case
+Training launches as a detached worker by default. **After RoboDaddy says it is queued,
+you may close the terminal and the job continues.** Use `--foreground` with the advanced
+`train` command only when you intentionally want the terminal attached. Paid Vast.ai
+training continues on the rented cloud instance; monitor the included Vast console link.
+Price and duration are estimates, and no paid GPU is rented without explicit confirmation.
+
+```bash
+# STEP 1: See recipes or start the recommended guided workflow
+cyberspace robodaddy usecases
+cyberspace robodaddy build "blue team alert assistant"
+
+# STEP 2: Search curated data directly (the guided flow also searches live HF data)
 cyberspace robodaddy datasets "offensive pen security"
 
 # STEP 3: See what GPUs you can rent and what they cost
@@ -476,27 +499,49 @@ cyberspace robodaddy gpus
 # STEP 4: Search LIVE GPU prices on Vast.ai (a cloud GPU marketplace)
 cyberspace robodaddy instances --gpu RTX_4090
 
-# STEP 5: Build a training plan (interactive — picks data, model, GPU, cost)
+# STEP 5: Build a plan manually (advanced alternative to `build`)
 cyberspace robodaddy plan "offensive pen security"
 
-# STEP 6: Run the training (dry-run first — no cost, shows realistic stats)
+# STEP 6: Launch background training (dry-run by default, no cost)
 cyberspace robodaddy train offensive_pentest --provider dry-run
 
-# STEP 7: Check the results
-cyberspace robodaddy jobs         # see loss curves, samples, cost
+# STEP 7: Check one or many concurrent jobs
+cyberspace robodaddy dashboard          # snapshot: queued/training/done/failed
+cyberspace robodaddy dashboard --watch  # live view; Ctrl-C closes only the dashboard
+cyberspace robodaddy jobs               # compact job table
 cyberspace robodaddy models       # see your trained models
 
 # STEP 8: Serve the model and plug it back into the system as the new brain
 cyberspace robodaddy serve offensive_pentest-d1 --target ollama
-cyberspace robodaddy use offensive_pentest-d1
+cyberspace robodaddy connect offensive_pentest-d1
+
+# Or ask the scoped AI to do it:
+cyberspace ai robodaddy connect my served model to Cyberspace Swarm
 ```
+
+#### Model API keys
+
+RoboDaddy stores generated key secrets in macOS Keychain, Windows Credential Locker, or
+Linux Secret Service. JSON contains only prefixes and metadata.
+
+```bash
+cyberspace robodaddy keys list
+cyberspace robodaddy keys new offensive_pentest-d1
+cyberspace robodaddy keys show rbd_example  # explicit secret retrieval
+cyberspace robodaddy keys revoke rbd_example
+cyberspace robodaddy provider-key vastai    # securely save a Vast.ai key
+```
+
+These are credentials for a served-model integration. The serving gateway must enforce
+them; a raw local Ollama endpoint does not become an authentication gateway merely because
+a key record was created.
 
 <details>
 <summary><b>Real cloud training (costs money)</b></summary>
 
 ```bash
-# Set your Vast.ai API key:
-export VAST_API_KEY=your_key_here
+# Save your Vast.ai API key in the native credential store:
+cyberspace robodaddy provider-key vastai
 
 # Find a GPU to rent:
 cyberspace robodaddy instances --gpu RTX_4090

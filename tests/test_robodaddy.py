@@ -35,6 +35,7 @@ def main():
     assert match_preset("offensive pen security") == "offensive_pentest"
     assert match_preset("personal assistant") == "personal_assistant"
     assert match_preset("roleplay companion") == "creative_roleplay"
+    assert match_preset("coding assistant for beginners") == "code"
     assert match_preset("") == "general"
     assert all("base" in p and "datasets" in p for p in PRESETS.values())
     print(f"PASS  presets: {len(PRESETS)} use cases matched from free text")

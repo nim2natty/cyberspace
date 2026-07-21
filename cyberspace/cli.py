@@ -81,6 +81,44 @@ def agent():
             a.ask(q)
 
 
+@app.command("ai")
+def platform_ai(
+    platform: str = typer.Argument(..., help="iceberg|airbender|shadowdragon|stickem|robodaddy"),
+    request: list[str] = typer.Argument(..., help="plain-language request for that platform"),
+):
+    """Run one platform in scoped AI mode (example: `cyberspace ai iceberg check privacy`)."""
+    _autoload()
+    selector = platform.strip().lower()
+    platform = selector.split(".", 1)[0]
+    if platform not in LOADED_MODULES:
+        console.print(f"[red]Unknown platform '{platform}'.[/red] Choose: " +
+                      ", ".join(sorted(LOADED_MODULES)))
+        raise typer.Exit(2)
+    from .agent.config import load_config
+    from .agent.core import Agent
+    cfg = load_config()
+    if not cfg:
+        console.print("[red]AI is not configured.[/red] Run: cyberspace setup")
+        raise typer.Exit(1)
+    scoped = TOOL_REGISTRY.scoped(platform)
+    if "." in selector:
+        selected = scoped.get(selector)
+        if not selected:
+            console.print(f"[red]Unknown tool '{selector}'.[/red] Available: " +
+                          ", ".join(tool.name for tool in scoped.all()))
+            raise typer.Exit(2)
+        from .modules.base import ToolRegistry
+        exact = ToolRegistry()
+        exact.register(selected)
+        scoped = exact
+    prompt = " ".join(request).strip()
+    console.print(Panel.fit(
+        f"[bold cyan]{selector} AI mode[/bold cyan] ({cfg.provider}/{cfg.model})\n"
+        f"Runtime scope: {len(scoped.all())} selected tool(s) only.", border_style="cyan"))
+    Agent(cfg, registry=scoped, console=console, include_project_tools=False,
+          scope=selector).ask(prompt)
+
+
 @app.command()
 def dashboard():
     """Open the Cyber Kill Chain workspace (the default `cyberspace` view)."""

@@ -9,16 +9,17 @@ an Ollama-compatible endpoint and configured as cyberspace's custom provider.
   usecases   see use-case presets -> recommended data + model + GPU
   providers  list GPU-rental marketplaces
   instances  search live GPU offers on Vast.ai
-  plan       interactive: usecase -> data -> GPU -> days -> cost estimate
-  train      generate one or more training jobs (dry-run or Vast.ai dispatch)
-  jobs       list training jobs + statistics (loss, samples, $, days)
+  build      guided intent -> live data -> GPU/price -> confirmed background training
+  plan       advanced interactive planning without launch
+  train      launch one or more detached jobs (or --foreground)
+  dashboard  watch concurrent queued/training/done/failed jobs
   models     registry of trained models
   serve      write a local Ollama Modelfile and issue a local API key record
-  keys       manage API keys for served models
-  use        set a trained+served model as cyberbot's active LLM
+  keys       securely create/show/list/revoke served-model keys
+  connect    set a trained+served model as cyberbot's active LLM
 
 For LEGAL, authorized use. Training uses public datasets under their own licenses;
 respect each dataset's terms. Cloud GPU rental costs real money - every command
 that would spend shows the cost first and asks before proceeding.
 """
-__version__ = "0.1.0"
+__version__ = "0.7.0"

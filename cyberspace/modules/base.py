@@ -57,6 +57,13 @@ class ToolRegistry:
     def by_module(self, module: str) -> list[Tool]:
         return [t for t in self._tools.values() if t.module == module]
 
+    def scoped(self, module: str) -> "ToolRegistry":
+        """Return an independent registry containing only one exact module."""
+        scoped = ToolRegistry()
+        for tool in self.by_module(module):
+            scoped.register(tool)
+        return scoped
+
 
 @dataclass
 class ModuleInfo:

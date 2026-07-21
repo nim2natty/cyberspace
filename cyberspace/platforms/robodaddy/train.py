@@ -9,6 +9,7 @@ train.py takes a TrainingPlan and:
 from __future__ import annotations
 
 import json
+import base64
 import math
 import random
 import time
@@ -48,6 +49,7 @@ from trl import SFTTrainer, SFTConfig
 
 MODEL = "{base_hf}"
 DATASET = "{dataset_id}"
+DATASET_REVISION = "{dataset_revision}"
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "/root/model_out")
 SYSTEM = {system!r}
 
@@ -83,7 +85,7 @@ def format_example(ex):
     return {{"text": text}}
 
 if __name__ == "__main__":
-    raw = load_dataset(DATASET, split="train")
+    raw = load_dataset(DATASET, revision=DATASET_REVISION, split="train", trust_remote_code=False)
     ds = raw.map(format_example, remove_columns=list(raw.column_names))
     bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
                              bnb_4bit_compute_dtype="bfloat16")
@@ -122,7 +124,8 @@ def write_job_files(plan: TrainingPlan) -> Path:
             "export HF_TOKEN with read access.\n"
         )
     script = TRAIN_SCRIPT.format(
-        base_hf=base_hf, dataset_id=plan.dataset_id, epochs=plan.epochs,
+        base_hf=base_hf, dataset_id=plan.dataset_id,
+        dataset_revision=plan.dataset_revision, epochs=plan.epochs,
         lr=plan.learning_rate, seq_len=plan.max_seq_len, lora_r=plan.lora_r,
         lora_alpha=plan.lora_r * 2,
         batch=plan.batch_size, system=_preset_system(plan.use_case),
@@ -236,11 +239,28 @@ def run_training(plan: TrainingPlan, *, dry_run: bool = True,
             upsert_model(m)
             return m
         from .vast import VastClient
+        from .datasets import dataset_by_id
+        metadata = dataset_by_id(plan.dataset_id)
+        gated = ((metadata and metadata.get("access") != "public") or
+                 any("dataset access=gated" in note.lower() for note in plan.notes))
+        if gated:
+            emit("error", "automatic paid dispatch does not transmit HF_TOKEN; select public data or use a reviewed manual setup. No GPU was rented")
+            m.status = "planned"
+            upsert_model(m)
+            return m
         emit("rent", f"renting Vast.ai offer #{vast_offer_id} ...")
         vc = VastClient()
         try:
+            encoded = base64.b64encode((jdir / "train.py").read_bytes()).decode()
+            bootstrap = (
+                "mkdir -p /root/robodaddy /root/model_out; "
+                f"echo {encoded} | base64 -d > /root/robodaddy/train.py; "
+                "python -m pip install -q transformers trl peft datasets accelerate bitsandbytes; "
+                "nohup python /root/robodaddy/train.py > /root/robodaddy/training.log 2>&1 &"
+            )
             res = vc.rent(vast_offer_id,
-                          image="pytorch/pytorch:2.3.0-cuda12.1-cudnn8-devel", disk_gb=120.0)
+                          image="pytorch/pytorch:2.3.0-cuda12.1-cudnn8-devel", disk_gb=120.0,
+                          onstart=bootstrap)
             emit("rent", f"instance launched: {res}")
         except Exception as e:
             emit("error", f"rent failed: {e}")
@@ -253,7 +273,7 @@ def run_training(plan: TrainingPlan, *, dry_run: bool = True,
             emit("vast", f"instance id {instance_id}; console: {console_url}")
         else:
             emit("vast", f"instance console: {console_url}")
-        emit("train", "training dispatched; watch the progress file and Vast.ai instance logs")
+        emit("train", "training bootstrap dispatched; monitor /root/robodaddy/training.log in Vast.ai")
         stats = {"status": "dispatched_to_vast", "offer_id": vast_offer_id,
                  "cost_mid": plan.cost_mid, "hours": plan.hours,
                  "job_dir": str(jdir), "progress_file": str(progress_file),
@@ -262,7 +282,7 @@ def run_training(plan: TrainingPlan, *, dry_run: bool = True,
         final_status = "training"
         emit("done", "training dispatched to cloud GPU")
 
-    m.stats = stats
+    m.stats = {**m.stats, **stats}
     m.status = final_status
     m.created = stats.get("finished") or stats.get("dispatched") or datetime.now().isoformat()
     upsert_model(m)

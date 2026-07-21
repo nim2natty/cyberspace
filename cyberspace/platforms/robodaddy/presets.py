@@ -58,7 +58,7 @@ PRESETS = {
     "code": {
         "label": "Coding / Engineering",
         "prompt_examples": ["code ai", "code model", "coding model", "code review",
-                            "developer assistant", "copilot"],
+                            "coding assistant", "python coding", "developer assistant", "copilot"],
         "base": "qwen2.5-7b", "method": "qlora",
         "datasets": "code",
         "system_prompt": "You are an expert software engineer. Write clean, correct code.",

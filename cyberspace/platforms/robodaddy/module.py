@@ -82,15 +82,11 @@ def _tool_train(use_case: str = "general", days: int = 1, base: str = "",
                    gpu=(gpu or None), days=days)
         for case in cases
     ]
-    if len(plans) == 1:
-        from .train import run_training
-        models = [run_training(plans[0], dry_run=True)]
-    else:
-        from .train import run_training_batch
-        models = run_training_batch(plans, dry_run=True)
+    from .jobs import launch_background
+    models = [launch_background(plan, dry_run=True) for plan in plans]
     return "\n".join(
-        f"trained {m.name}: status={m.status} end_loss={m.stats.get('end_loss')} "
-        f"samples={m.stats.get('samples_trained')} progress={m.stats.get('progress_file')}"
+        f"launched {m.name}: status={m.status} pid={m.stats.get('pid')} "
+        f"log={m.stats.get('log_file')}; terminal may close"
         for m in models
     )
 
@@ -102,6 +98,27 @@ def _tool_models(**_):
     if not ms:
         return "no models trained yet."
     return "\n".join(f"- {m.name}: {m.status} ({m.base_model})" for m in ms)
+
+
+def _tool_jobs(**_):
+    from .jobs import refresh_jobs
+    models = refresh_jobs()
+    if not models:
+        return "no training jobs yet"
+    return "\n".join(f"- {m.name}: {m.status}, provider={m.stats.get('provider', '-')}, "
+                     f"cost={m.stats.get('cost_mid', m.stats.get('estimated_cost', '-'))}, "
+                     f"log={m.stats.get('progress_file', m.stats.get('log_file', '-'))}"
+                     for m in models)
+
+
+def _tool_discover(intent: str = "", limit: int = 8):
+    if not intent:
+        return "intent required"
+    from .discovery import discover_datasets, expand_search_terms, rank_datasets
+    ranked = rank_datasets(intent, discover_datasets(intent, limit=min(limit * 2, 20),
+                           search_terms=expand_search_terms(intent)), limit=limit)
+    return "\n".join(f"- {d['id']}: {d.get('size')} {d.get('license')}/"
+                     f"{d.get('access')} — {d.get('reason')}" for d in ranked)
 
 
 def _tool_serve(model_name: str = ""):
@@ -116,12 +133,40 @@ def _tool_serve(model_name: str = ""):
         return str(e)
 
 
+def _tool_connect(model_name: str = ""):
+    if not model_name:
+        return "model_name required"
+    from .serve import use_as_cyberbot
+    try:
+        endpoint, _ = use_as_cyberbot(model_name)
+        return f"connected {model_name} to Cyberspace Swarm at {endpoint}"
+    except ValueError as exc:
+        return str(exc)
+
+
+def _tool_keys(action: str = "list", model_name: str = "", prefix: str = ""):
+    from .registry import get_model, issue_key, list_keys, revoke_key
+    if action == "list":
+        keys = list_keys()
+        return "\n".join(f"- {key.prefix}... model={key.model_name} id={key.key_id[:10]}"
+                         for key in keys) or "no keys issued"
+    if action == "new":
+        model = get_model(model_name)
+        if not model or model.status != "served" or not model.endpoint:
+            return "model must be served before issuing a key"
+        key = issue_key(model_name, model.endpoint, note="issued by Cyberspace AI")
+        return f"created key {key.prefix}... in the native credential store; use CLI keys show to reveal it"
+    if action == "revoke":
+        return f"revoked {revoke_key(prefix)} key(s)"
+    return "action must be list, new, or revoke"
+
+
 class RoboDaddyModule(Module):
     def describe(self) -> ModuleInfo:
         return ModuleInfo(
             name="robodaddy", display_name="RoboDaddy", version="0.1.0",
             emoji="\U0001F916",  # robot
-            description="Plan, dry-run, and dispatch QLoRA fine-tunes with dataset recommendations.",
+            description="Guided live data discovery, GPU pricing, background training, serving, and keys.",
             requires_tools=[],   # no host tools needed (everything is Python + remote APIs)
         )
 
@@ -160,11 +205,36 @@ class RoboDaddyModule(Module):
             description="List trained models in the registry.",
             parameters={"type": "object", "properties": {}}, fn=_tool_models))
         registry.register(Tool(
+            name="robodaddy.jobs",
+            description="Show background training jobs and whether each is queued, training, done, or failed.",
+            parameters={"type": "object", "properties": {}}, fn=_tool_jobs))
+        registry.register(Tool(
+            name="robodaddy.discover",
+            description="Search live Hugging Face datasets and use the configured provider to rank useful options.",
+            parameters={"type": "object",
+                        "properties": {"intent": {"type": "string"},
+                                       "limit": {"type": "integer", "default": 8}},
+                        "required": ["intent"]}, fn=_tool_discover))
+        registry.register(Tool(
             name="robodaddy.serve",
             description="Write a local Ollama Modelfile and API-key record for a trained model.",
             parameters={"type": "object",
                         "properties": {"model_name": {"type": "string"}},
                         "required": ["model_name"]}, fn=_tool_serve))
+        registry.register(Tool(
+            name="robodaddy.connect",
+            description="Connect a served RoboDaddy model as the active Cyberspace Swarm provider.",
+            parameters={"type": "object",
+                        "properties": {"model_name": {"type": "string"}},
+                        "required": ["model_name"]}, fn=_tool_connect))
+        registry.register(Tool(
+            name="robodaddy.keys",
+            description="List key prefixes, create a key for a served model, or revoke by prefix. Secrets are never returned to AI.",
+            parameters={"type": "object",
+                        "properties": {"action": {"type": "string", "enum": ["list", "new", "revoke"]},
+                                       "model_name": {"type": "string", "default": ""},
+                                       "prefix": {"type": "string", "default": ""}},
+                        "required": ["action"]}, fn=_tool_keys))
 
     def build_cli(self) -> typer.Typer:
         from .cli import build_robodaddy_cli

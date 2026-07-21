@@ -66,7 +66,7 @@ def serve(model_name: str, *, target: str = "ollama", port: int = 11435,
         raise ValueError(f"unknown serve target '{target}'")
 
     key = issue_key(model_name, endpoint, note=note)
-    on_event("key", f"issued API key: {key.key[:16]}... (full key in `robodaddy keys`)")
+    on_event("key", f"issued API key: {key.prefix}... (retrieve with `robodaddy keys show {key.prefix}`)")
     on_event("done", f"endpoint: {endpoint}")
     # Reload the model so it reflects the updated endpoint/status.
     m = get_model(model_name) or m

@@ -114,21 +114,32 @@ def build_system_prompt(base: str = "") -> str:
 
 
 class Agent:
-    def __init__(self, cfg: LLMConfig, registry=TOOL_REGISTRY, console: Optional[Console] = None):
+    def __init__(self, cfg: LLMConfig, registry=TOOL_REGISTRY, console: Optional[Console] = None,
+                 *, include_project_tools: bool = True, scope: str = ""):
         self.cfg = cfg
         self.provider = get_provider(cfg)
         self.registry = registry
         self.console = console or Console()
+        self.include_project_tools = include_project_tools
+        project_names = {tool.name for tool in _project_tools()} if include_project_tools else set()
+        self.allowed_tools = frozenset({tool.name for tool in registry.all()} | project_names)
         system = build_system_prompt(cfg.system_prompt or DEFAULT_SYSTEM)
+        if scope:
+            system += (f"\n\nYou are in strict {scope} AI mode. Only call the supplied {scope} tools. "
+                       "Calls outside this platform are denied by the runtime.")
         self.messages: list[dict] = [{"role": "system", "content": system}]
         self.max_iterations = 12
 
     @property
     def tools(self) -> list[Tool]:
-        return self.registry.all() + _project_tools()
+        return self.registry.all() + (_project_tools() if self.include_project_tools else [])
 
     def _execute(self, call) -> str:
+        if call.name not in self.allowed_tools:
+            return f"ERROR: tool '{call.name}' is outside this AI mode's allowed scope."
         tool = self.registry.get(call.name)
+        if not tool and self.include_project_tools:
+            tool = next((candidate for candidate in _project_tools() if candidate.name == call.name), None)
         if not tool:
             return f"ERROR: tool '{call.name}' not found."
         self.console.print(f"   [dim]calling[/dim] [cyan]{call.name}[/cyan]({call.arguments})")

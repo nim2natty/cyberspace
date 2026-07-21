@@ -20,6 +20,7 @@ class TrainingPlan:
     use_case: str                       # preset key
     base_model: str                     # e.g. "llama3.1-8b"
     dataset_id: str                     # HF repo id
+    dataset_revision: str = "main"       # pinned HF commit/revision from discovery
     method: str = "qlora"               # qlora | lora | full
     gpu: str = "RTX_4090"               # GPU id from gpus.GPUS
     num_gpus: int = 1
@@ -58,7 +59,8 @@ def _hours_for(model_b: int, samples: int, epochs: int, seq_len: int,
 
 def build_plan(use_case: str, *, base_model: Optional[str] = None,
                dataset_id: Optional[str] = None, gpu: Optional[str] = None,
-               days: int = 1, num_gpus: int = 1, epochs: int = 3) -> TrainingPlan:
+               dataset_revision: str = "main", days: int = 1,
+               num_gpus: int = 1, epochs: int = 3) -> TrainingPlan:
     """Construct a plan from a use case + overrides, with cost/time estimates."""
     use_case = resolve_use_case(use_case)
     preset = preset_for(use_case)
@@ -102,7 +104,8 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
     return TrainingPlan(
         name=f"{_safe_name(base)}-{_safe_name(use_case)}-d{days}",
         use_case=use_case, base_model=base,
-        dataset_id=ds, method=preset["method"], gpu=chosen_gpu, num_gpus=num_gpus,
+        dataset_id=ds, dataset_revision=dataset_revision or "main",
+        method=preset["method"], gpu=chosen_gpu, num_gpus=num_gpus,
         epochs=epochs, days=days, samples=samples, hours=hours,
         cost_low=low, cost_mid=mid, cost_high=high, notes=notes,
     )

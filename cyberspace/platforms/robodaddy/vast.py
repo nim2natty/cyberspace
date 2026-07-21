@@ -17,10 +17,17 @@ from typing import Optional
 import httpx
 
 API_BASE = "https://console.vast.ai/api/v0"
+VAST_GPU_NAMES = {
+    "RTX_4090": "RTX_4090", "RTX_3090": "RTX_3090", "A6000": "RTX_A6000",
+    "L40S": "L40S", "A100_80": "A100_SXM4_80GB", "A100_40": "A100_PCIE_40GB",
+    "H100": "H100_SXM", "H200": "H200_SXM",
+}
 
 
 def api_key() -> Optional[str]:
-    return os.environ.get("VAST_API_KEY") or os.environ.get("VAST_KEY")
+    from ...credentials import get_secret
+    return (os.environ.get("VAST_API_KEY") or os.environ.get("VAST_KEY") or
+            get_secret("robodaddy:vast-api-key"))
 
 
 @dataclass

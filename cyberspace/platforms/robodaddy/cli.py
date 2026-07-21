@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -30,7 +31,7 @@ from .gpus import GPUS, best_value_gpu, gpus_for_model
 from .plan import build_plan
 from .presets import BASE_MODELS, PRESETS, preset_for, resolve_use_case
 from .providers import PROVIDERS
-from .registry import list_keys, list_models
+from .registry import list_keys, list_models, issue_key, revoke_key
 
 
 def _print_dataset_table(console: Console, datasets: list[dict]) -> None:
@@ -60,7 +61,7 @@ def _print_search_results(console: Console, results: list[dict]) -> None:
 
 
 def build_robodaddy_cli(console: Console) -> typer.Typer:
-    app = typer.Typer(help="RoboDaddy: plan, dry-run, and dispatch model fine-tunes.")
+    app = typer.Typer(help="RoboDaddy: guided data, GPU pricing, background training, serving, and keys.")
 
     @app.command("usecases")
     def usecases():
@@ -69,6 +70,88 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         for k, p in PRESETS.items():
             t.add_row(k, p["label"], p["base"], p["method"], p["datasets"])
         console.print(t)
+
+    @app.command("build")
+    def guided_build(
+        use_case: str = typer.Argument("", help="short use case, e.g. coding assistant"),
+        provider: str = typer.Option("dry-run", "--provider", "-p", help="dry-run|vastai"),
+        offer: Optional[int] = typer.Option(None, "--offer", help="Vast.ai offer ID for paid training"),
+        no_ai: bool = typer.Option(False, "--no-ai", help="rank data without the configured provider"),
+    ):
+        """Guided use case → intent → datasets → GPU/price → background training."""
+        if provider not in ("dry-run", "vastai"):
+            console.print("[red]provider must be dry-run or vastai[/red]"); raise typer.Exit(2)
+        if not use_case:
+            use_case = Prompt.ask("What kind of AI do you want to build?", default="coding assistant")
+        intent = Prompt.ask("What should this AI do, for whom, and what matters most?",
+                            default=use_case)
+        uc = resolve_use_case(use_case + " " + intent)
+        preset = preset_for(uc)
+        console.print(f"\n[cyan]Searching live Hugging Face datasets for:[/cyan] {intent}")
+        from .discovery import discover_datasets, expand_search_terms, rank_datasets
+        terms = [intent] if no_ai else expand_search_terms(intent)
+        candidates = discover_datasets(intent, limit=15, search_terms=terms)
+        ranked = candidates[:8] if no_ai else rank_datasets(intent, candidates, limit=8)
+        if not ranked:
+            console.print("[red]No suitable datasets were found.[/red]"); raise typer.Exit(1)
+        _print_search_results(console, ranked)
+        choices = [str(i) for i in range(1, len(ranked) + 1)]
+        selected = ranked[int(Prompt.ask("Dataset #", choices=choices, default="1")) - 1]
+
+        base = preset["base"]
+        if Confirm.ask(f"Use recommended base model {base}?", default=True) is False:
+            base = Prompt.ask("Base model", choices=list(BASE_MODELS), default=base)
+        days = int(Prompt.ask("Training budget in days", default="1"))
+        num_gpus = int(Prompt.ask("Number of GPUs", default="1"))
+        bparams = BASE_MODELS[base]["billion"]
+        gpu = best_value_gpu(bparams, preset["method"]) or "A100_40"
+        plan = build_plan(uc, base_model=base, dataset_id=selected["id"],
+                          dataset_revision=selected.get("revision", "main"), gpu=gpu,
+                          days=days, num_gpus=num_gpus)
+        plan.notes.append(f"intent: {intent}")
+        plan.notes.append(f"dataset source={selected.get('source', 'unknown')} "
+                          f"revision={selected.get('revision', 'main')}")
+        plan.notes.append(f"dataset access={selected.get('access', 'unknown')}")
+        console.print(Panel.fit(
+            f"[bold]{plan.name}[/bold]\nintent: {intent}\nbase: {base}   "
+            f"dataset: {selected['id']}\nlicense/access: {selected.get('license')} / "
+            f"{selected.get('access')}\nGPU: {num_gpus}x {gpu}   estimated time: {plan.hours}h\n"
+            f"estimated price: ${plan.cost_low:.2f}-${plan.cost_high:.2f} "
+            f"(mid ${plan.cost_mid:.2f})", title="RoboDaddy recommendation", border_style="cyan"))
+        if provider == "vastai" and offer is None:
+            from .vast import VAST_GPU_NAMES, VastClient
+            console.print(f"\n[cyan]Finding live {gpu} offers on Vast.ai...[/cyan]")
+            try:
+                offers = VastClient().search(gpu_name=VAST_GPU_NAMES.get(gpu, gpu),
+                                             num_gpus=num_gpus, limit=5)
+            except Exception as exc:
+                console.print(f"[red]Could not load live offers: {exc}[/red]"); raise typer.Exit(1)
+            if not offers:
+                console.print("[red]No compatible rentable offers are currently available.[/red]")
+                raise typer.Exit(1)
+            table = Table("#", "GPU", "$/hr", "projected total", "reliability", "location")
+            for index, candidate in enumerate(offers, 1):
+                table.add_row(str(index), candidate.gpu_name, f"${candidate.dph_total:.3f}",
+                              f"${candidate.dph_total * plan.hours:.2f}",
+                              f"{candidate.reliability:.2f}", candidate.geolocation)
+            console.print(table)
+            choice = int(Prompt.ask("Offer #", choices=[str(i) for i in range(1, len(offers) + 1)],
+                                    default="1")) - 1
+            chosen_offer = offers[choice]
+            offer = chosen_offer.id
+            plan.cost_low = plan.cost_mid = plan.cost_high = round(chosen_offer.dph_total * plan.hours, 2)
+            console.print(f"[yellow]Selected offer #{offer}: ${chosen_offer.dph_total:.3f}/hr, "
+                          f"projected ${plan.cost_mid:.2f} total.[/yellow]")
+        question = "Rent the GPU and launch paid training?" if provider == "vastai" else "Launch this training dry-run?"
+        if not Confirm.ask(question, default=False):
+            console.print("[dim]Plan reviewed; nothing was launched.[/dim]"); return
+        from .jobs import launch_background
+        model = launch_background(plan, dry_run=(provider == "dry-run"), vast_offer_id=offer)
+        console.print(Panel.fit(
+            f"[green]launched in background:[/green] {model.name}\nstatus: {model.status}\n"
+            "You may close this terminal; the worker runs independently.\n"
+            "Check progress: cyberspace robodaddy dashboard",
+            border_style="green"))
 
     @app.command("datasets")
     def datasets(
@@ -122,7 +205,7 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         for k, p in PROVIDERS.items():
             t.add_row(k, p["api_base"] or "(none)", "yes" if p["live"] else "no", p["note"])
         console.print(t)
-        console.print("\n[dim]Set keys: export VAST_API_KEY=...  "
+        console.print("\n[dim]Save a key securely: cyberspace robodaddy provider-key vastai "
                       "(get one at cloud.vast.ai/account/settings/)[/dim]")
 
     @app.command("instances")
@@ -131,12 +214,9 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
                   max_dph: float = typer.Option(0.0, "--max-dph", help="max $/hr"),
                   limit: int = typer.Option(12, "--limit")):
         """Search LIVE Vast.ai GPU offers (real prices; rent needs a key)."""
-        from .vast import VastClient
+        from .vast import VAST_GPU_NAMES, VastClient
         vc = VastClient()
-        # Map our GPU ids to Vast's gpu_name strings.
-        vast_name = {"RTX_4090": "RTX_4090", "RTX_3090": "RTX_3090", "A100_80": "A100_SXM4_80GB",
-                     "A100_40": "A100_PCIE_40GB", "A6000": "RTX_A6000", "H100": "H100_SXM5_80GB",
-                     "L40S": "L40", "H200": "H200"}.get(gpu.upper()) if gpu else None
+        vast_name = VAST_GPU_NAMES.get(gpu, gpu)
         console.print(f"[dim]searching Vast.ai offers...[/dim]")
         try:
             offers = vc.search(gpu_name=vast_name, num_gpus=num_gpus,
@@ -221,9 +301,11 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
               epochs: int = typer.Option(3, "--epochs"),
               provider: str = typer.Option("dry-run", "--provider", "-p",
                                           help="dry-run|vastai"),
+              foreground: bool = typer.Option(False, "--foreground",
+                                                help="keep this terminal attached"),
               offer: Optional[list[int]] = typer.Option(
                   None, "--offer", help="Vast.ai offer id; repeat once per model for batches")):
-        """Run one or more fine-tune jobs. Dry-run is simulated and concurrent."""
+        """Launch detached fine-tune jobs; use --foreground to keep the terminal attached."""
         if provider not in ("dry-run", "vastai"):
             console.print("[red]provider must be dry-run or vastai[/red]")
             raise typer.Exit(1)
@@ -251,6 +333,17 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         def on_batch(job, stage, msg):
             console.print(f"[dim]{job} {stage:>8}[/dim]  {msg}")
 
+        if not foreground:
+            from .jobs import launch_background
+            models = [launch_background(plan, dry_run=dry,
+                        vast_offer_id=(offer_ids[index] if offer_ids else None))
+                      for index, plan in enumerate(plans)]
+            for model in models:
+                console.print(f"[green]background job queued:[/green] {model.name} "
+                              f"(PID {model.stats.get('pid', 'starting')})")
+            console.print("[bold]You may close this terminal.[/bold] Training continues independently.\n"
+                          "Check all jobs: cyberspace robodaddy dashboard")
+            return
         if len(plans) == 1:
             from .train import run_training
             models = [run_training(plans[0], dry_run=dry,
@@ -278,17 +371,63 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
     @app.command("jobs")
     def jobs():
         """List training jobs + their statistics."""
-        models = list_models()
+        from .jobs import refresh_jobs
+        models = refresh_jobs()
         if not models:
             console.print("[dim]no jobs yet. Run: cyberspace robodaddy plan[/dim]"); return
         t = Table("model", "status", "base", "end_loss", "samples", "hours", "$mid", "progress")
         for m in models:
             s = m.stats
-            t.add_row(m.name, m.status, m.base_model,
+            display_status = "done" if m.status in ("trained", "served") else m.status
+            t.add_row(m.name, display_status, m.base_model,
                       str(s.get("end_loss", "-")), str(s.get("samples_trained", "-")),
                       str(s.get("hours", "-")), str(s.get("cost_mid", "-")),
                       str(s.get("progress_file", "-")))
         console.print(t)
+
+    @app.command("dashboard")
+    def dashboard(
+        watch: bool = typer.Option(False, "--watch", "-w", help="refresh until Ctrl-C"),
+        interval: float = typer.Option(2.0, "--interval", min=0.5),
+    ):
+        """Show concurrent training progress; --watch refreshes live."""
+        import time
+        from .jobs import refresh_jobs
+
+        def render() -> None:
+            models = refresh_jobs()
+            t = Table("model", "status", "provider", "PID/instance", "loss", "cost", "progress/log")
+            for model in models:
+                stats = model.stats
+                identity = stats.get("vast_instance_id") or stats.get("pid") or "-"
+                progress = stats.get("progress_file") or stats.get("log_file") or "-"
+                display_status = "done" if model.status in ("trained", "served") else model.status
+                t.add_row(model.name, display_status, str(stats.get("provider", "-")), str(identity),
+                          str(stats.get("end_loss", "-")),
+                          str(stats.get("cost_mid", stats.get("estimated_cost", "-"))), str(progress))
+            console.print(t if models else "[dim]No jobs. Run: cyberspace robodaddy build[/dim]")
+            done = sum(model.status in ("trained", "served") for model in models)
+            failed = sum(model.status == "failed" for model in models)
+            active = sum(model.status in ("queued", "training") for model in models)
+            console.print(f"[dim]{done} done · {active} active · {failed} failed[/dim]")
+
+        if not watch:
+            render(); return
+        try:
+            while True:
+                console.clear()
+                render()
+                time.sleep(interval)
+        except KeyboardInterrupt:
+            console.print("\n[dim]Dashboard closed; background jobs continue.[/dim]")
+
+    @app.command("worker", hidden=True)
+    def worker(plan_file: Path = typer.Argument(..., exists=True, dir_okay=False),
+               dry_run: bool = typer.Option(False, "--dry-run"),
+               offer: Optional[int] = typer.Option(None, "--offer")):
+        """Internal detached worker entry point."""
+        from .jobs import run_worker
+        raise typer.Exit(run_worker(plan_file, dry_run=dry_run, vast_offer_id=offer))
 
     @app.command("models")
     def models():
@@ -317,20 +456,66 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         console.print(Panel.fit(
             f"[green]served:[/green] {m.name}\n"
             f"endpoint: {m.endpoint}\n"
-            f"api key:  {key[:24]}...  [dim](full: robodaddy keys)[/dim]",
+            f"api key:  {key[:24]}...  [dim](retrieve later: robodaddy keys show {key[:12]})[/dim]",
             border_style="green"))
         console.print(f"[dim]use it: cyberspace robodaddy use {m.name}[/dim]")
 
-    @app.command("keys")
-    def keys():
-        """List/revoke API keys for served models."""
+    keys_app = typer.Typer(help="Create, show, list, and revoke served-model API keys.")
+    app.add_typer(keys_app, name="keys")
+
+    @keys_app.command("list")
+    def keys_list():
+        """List key prefixes and metadata (never prints secret values)."""
         ks = list_keys()
         if not ks:
             console.print("[dim]no keys issued yet. Serve a model first.[/dim]"); return
-        t = Table("key (prefix)", "model", "endpoint", "created")
+        t = Table("prefix", "id", "model", "endpoint", "created")
         for k in ks:
-            t.add_row(k.key[:20] + "...", k.model_name, k.endpoint, k.created[:10])
+            t.add_row(k.prefix + "...", k.key_id[:10], k.model_name, k.endpoint, k.created[:10])
         console.print(t)
+
+    @keys_app.command("new")
+    def keys_new(model_name: str = typer.Argument(...)):
+        """Create another API key for a served model; secret is stored in the OS keyring."""
+        from .registry import get_model
+        model = get_model(model_name)
+        if not model or model.status != "served" or not model.endpoint:
+            console.print("[red]Model must be served before a key can be issued.[/red]")
+            raise typer.Exit(1)
+        key = issue_key(model_name, model.endpoint, note="issued from RoboDaddy CLI")
+        console.print(Panel.fit(
+            f"[green]new key created[/green]\n{key.key}\n\n"
+            "Stored in your native credential store. Copy it now; `keys list` shows only prefixes.",
+            border_style="green"))
+
+    @keys_app.command("show")
+    def keys_show(prefix: str = typer.Argument(...)):
+        """Explicitly retrieve one key from the native credential store."""
+        matches = [key for key in list_keys() if key.prefix.startswith(prefix)
+                   or key.key_id.startswith(prefix)]
+        if len(matches) != 1:
+            console.print("[red]Key prefix is missing or ambiguous.[/red]"); raise typer.Exit(1)
+        secret = matches[0].key
+        if not secret:
+            console.print("[red]Secret is unavailable in this user's credential store.[/red]")
+            raise typer.Exit(1)
+        console.print(secret)
+
+    @keys_app.command("revoke")
+    def keys_revoke(prefix: str = typer.Argument(...)):
+        """Revoke keys matching an ID/prefix and remove their credential-store secrets."""
+        count = revoke_key(prefix)
+        console.print(f"[green]revoked {count} key(s)[/green]" if count else "[yellow]no matching key[/yellow]")
+
+    @app.command("provider-key")
+    def provider_key(provider: str = typer.Argument("vastai")):
+        """Securely save a GPU-provider key (currently Vast.ai)."""
+        if provider != "vastai":
+            console.print("[red]Only Vast.ai lifecycle automation is implemented.[/red]"); raise typer.Exit(2)
+        from ...credentials import set_secret
+        value = Prompt.ask("Vast.ai API key", password=True)
+        set_secret("robodaddy:vast-api-key", value)
+        console.print("[green]Vast.ai key stored in the native credential store.[/green]")
 
     @app.command("use")
     def use(model_name: str = typer.Argument(...)):
@@ -345,5 +530,7 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             f"model: {model_name}\nendpoint: {endpoint}\napi_key: {api_key[:16]}...",
             border_style="green"))
         console.print("[dim]test it: cyberspace agent[/dim]")
+
+    app.command("connect")(use)
 
     return app
