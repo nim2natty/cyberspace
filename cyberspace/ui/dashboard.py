@@ -1,9 +1,4 @@
-"""cyberspace dashboard - the multi-agent swarm hub.
-
-The tandem-style control plane: one clean space where you command a TEAM of
-specialized sub-agents. The Orchestrator delegates to Recon, Exploit, Ghost,
-Hardware, Smith, or Scribe automatically based on your objective.
-"""
+"""cyberspace workspace driven by the seven-stage Cyber Kill Chain."""
 from __future__ import annotations
 
 from rich.console import Console
@@ -15,21 +10,80 @@ from ..modules.base import LOADED_MODULES, TOOL_REGISTRY
 
 console = Console()
 
+WORDMARK = r"""[bold green]
+ ██████╗██╗   ██╗██████╗ ███████╗██████╗ ███████╗██████╗  █████╗  ██████╗███████╗
+██╔════╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗██╔════╝██╔══██╗██╔══██╗██╔════╝██╔════╝
+██║      ╚████╔╝ ██████╔╝█████╗  ██████╔╝███████╗██████╔╝███████║██║     █████╗
+██║       ╚██╔╝  ██╔══██╗██╔══╝  ██╔══██╗╚════██║██╔═══╝ ██╔══██║██║     ██╔══╝
+╚██████╗   ██║   ██████╔╝███████╗██║  ██║███████║██║     ██║  ██║╚██████╗███████╗
+ ╚═════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝ ╚═════╝╚══════╝[/bold green]"""
+
 
 def banner() -> None:
+    console.print(WORDMARK)
     console.print(Panel.fit(
-        "[bold cyan]cyberspace[/bold cyan] - multi-agent command hub\n"
-        "[dim]Command a swarm of specialized agents from one space. The Orchestrator\n"
-        "delegates to the right specialist for each phase of your engagement.[/dim]",
+        "[bold cyan]cyberspace[/bold cyan] - Cyber Kill Chain workspace\n"
+        "[dim]Reconnaissance → Weaponization → Delivery → Exploitation → Installation →\n"
+        "Command and Control (C2) → Actions on Objectives[/dim]",
         border_style="cyan"))
 
 
 def show_team() -> None:
     from ..swarm import TEAM
-    t = Table("agent", "role", "specialty")
+    t = Table("stage", "objective", "platform tools")
     for a in TEAM:
         t.add_row(f"{a.emoji} {a.display}", a.role, ", ".join(a.tool_prefixes) or "(analysis)")
     console.print(t)
+
+
+def _choose_workspace() -> bool:
+    """Choose saved project memory or ephemeral Ghost Mode on every launch."""
+    from .. import projects
+    active, items = projects.get_active(), projects.list_projects()
+    console.print("\n[bold]Prompt library[/bold]")
+    if active:
+        console.print(f"  active project: [green]{active}[/green]")
+    console.print("  1) Save prompts to active project\n  2) View/open a project folder")
+    console.print("  3) Create a project folder\n  4) Ghost Mode (save nothing)")
+    default = "1" if active else ("2" if items else "3")
+    choice = Prompt.ask("Workspace mode", choices=["1", "2", "3", "4"], default=default)
+    if choice == "4":
+        console.print("[yellow]Ghost Mode: prompts and outcomes will not be saved.[/yellow]")
+        return True
+    if choice == "3":
+        projects.create(Prompt.ask("New project name"), Prompt.ask("Description", default=""))
+    elif choice == "2":
+        if not items:
+            projects.create(Prompt.ask("No projects yet. New project name"))
+        else:
+            for i, item in enumerate(items, 1):
+                console.print(f"  {i}) {item['name']} ({item['prompt_count']} prompts) — {item['path']}")
+            selected = Prompt.ask("Open project", default="1")
+            try:
+                projects.set_active(items[int(selected) - 1]["name"])
+            except (ValueError, IndexError):
+                if not projects.find_and_open(selected):
+                    console.print(f"[red]No project matching '{selected}'.[/red]")
+                    return _choose_workspace()
+    elif not active:
+        projects.create(Prompt.ask("Project name"))
+    console.print(f"[green]Saving to:[/green] {projects.get_active()}")
+    return False
+
+
+def _authorize_objective(prompt: str) -> str | None:
+    """Confirm target ownership once for prompts that explicitly mention a lab."""
+    lab_terms = ("lab", "home network", "homelab", "home lab", "ctf", "training range")
+    if not any(term in prompt.lower() for term in lab_terms):
+        return prompt
+    console.print("[yellow]Authorization check:[/yellow] this objective mentions a lab environment.")
+    choice = Prompt.ask("Target scope", choices=["owned", "authorized", "unauthorized"],
+                        default="owned")
+    if choice == "unauthorized":
+        console.print("[red]Stopped: Cyberspace only operates on owned or explicitly authorized targets.[/red]")
+        return None
+    return (f"[AUTHORIZATION: operator confirmed target is {choice}; proceed within this scope "
+            f"without requesting authorization again.]\n{prompt}")
 
 
 def show_modules() -> None:
@@ -56,7 +110,7 @@ def run_swarm() -> None:
         return
     cfg = load_config()
     try:
-        swarm = Swarm(cfg, console)
+        swarm = Swarm(cfg, console, ghost_mode=_choose_workspace())
     except Exception as e:
         console.print(Panel.fit(
             f"[red]Could not start the swarm:[/red] {e}\n\n"
@@ -64,18 +118,21 @@ def run_swarm() -> None:
             border_style="red"))
         return
     console.print(Panel.fit(
-        f"[bold magenta]Swarm mode[/bold magenta] ({cfg.provider}/{cfg.model})\n"
-        "The Orchestrator delegates to: Recon, Exploit, Ghost, Hardware, Smith, Scribe.\n"
+        f"[bold magenta]Cyber Kill Chain[/bold magenta] ({cfg.provider}/{cfg.model})\n"
+        "Seven chronological stages are active; execution and model failover are shown live.\n"
         "Type 'exit' to leave.", border_style="magenta"))
     console.print("[dim]Example: 'Scan 10.10.10.0/24, find the web app, test it, write a report.'[/dim]\n")
     while True:
         try:
-            q = Prompt.ask("[magenta]mission[/magenta]")
+            q = Prompt.ask("[bold green]cyberspace[/bold green] [magenta]objective[/magenta]")
         except (EOFError, KeyboardInterrupt):
             break
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
+            q = _authorize_objective(q)
+            if q is None:
+                continue
             try:
                 swarm.ask(q)
             except ProviderError as e:
@@ -112,6 +169,9 @@ def run_single_agent() -> None:
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
+            q = _authorize_objective(q)
+            if q is None:
+                continue
             try:
                 a.ask(q)
             except ProviderError as e:
@@ -129,8 +189,8 @@ def interactive() -> None:
     banner()
     while True:
         console.print("\n[bold]cyberspace menu[/bold]")
-        console.print("  1) Show agent team      2) Show platforms + tools")
-        console.print("  3) Open a platform      4) [bold magenta]Swarm mode[/bold magenta] (command the whole team)")
+        console.print("  1) Show Kill Chain      2) Show platforms + tools")
+        console.print("  3) Open a platform      4) [bold magenta]Swarm mode[/bold magenta] (run the Kill Chain)")
         console.print("  5) Single-agent chat    q) quit")
         choice = Prompt.ask("Choice", default="4")
         if choice == "1": show_team()

@@ -25,26 +25,53 @@ the results in a way you can understand — even if you're not a security expert
 > **Built for:** the cyberdeck you're manufacturing. It runs on a Raspberry Pi 5,
 > a laptop, or anything that runs Linux, macOS, or Windows.
 
-## How it works
+## How it works: one Cyber Kill Chain workspace
 
-Behind the scenes, cyberspace is a **team of AI agents** — think of them as
-digital coworkers, each with a different job:
+Cyberspace organizes every request with the seven chronological stages of the
+Cyber Kill Chain. Describe the objective in plain language; Cyberspace identifies the
+relevant stage, selects scoped tools, shows each action, and reports in that stage's language.
 
-| Agent | Job (in plain English) |
+| Stage | What Cyberspace does |
 |---|---|
-| **Recon** 📶 | The scout. Maps out a network — finds every device, what ports are open, what software is running. |
-| **Exploit** 🐍 | The tester. Tries to break into things you've found, using tools like Metasploit (a famous hacking toolkit). |
-| **Ghost** 🧊 | The spy. Keeps you anonymous (a special browser that hides your identity) and searches the dark web for information. |
-| **Hardware** 🔌 | The hands. Controls physical gear — a WiFi attack board (ESP32), a serial cable (FT232), and your OpenWrt router. |
-| **Smith** 🤖 | The engineer. Builds custom AI models — you describe what you want the AI to be good at, and it trains one. |
-| **Scribe** 📝 | The writer. Takes everything the team found and writes a clear report. |
+| **1. Reconnaissance** 🔍 | Maps the authorized attack surface and cross-checks hosts, ports, services, DNS, and public information. |
+| **2. Weaponization** 🦠 | Matches findings to suitable tests and prepares payloads or test artifacts. |
+| **3. Delivery** 📧 | Handles the authorized delivery path, including controlled web interaction. |
+| **4. Exploitation** 💥 | Validates whether an identified weakness can be triggered within scope. |
+| **5. Installation** 📦 | Handles approved persistence, hardware, router, and implant-oriented lab work. |
+| **6. Command and Control (C2)** 📡 | Works with approved covert-channel, proxy, Tor, and callback tasks. |
+| **7. Actions on Objectives** 🎯 | Produces findings and reports and records project memory for later cross-reference. |
 
-You don't talk to each agent individually. You talk to the **Orchestrator** — the
-team lead. You give it a goal, and it hands out the work.
+```text
+you → Reconnaissance → Weaponization → Delivery → Exploitation
+    → Installation → Command and Control (C2) → Actions on Objectives
+```
 
-```
-       you  →  ORCHESTRATOR  →  [ Recon → Exploit → Scribe → ... ]
-```
+A request need not traverse every stage. Cyberspace enters the matching stage while
+retaining chronological context from earlier work in the active project.
+
+### A prompt library, or no trace
+
+Running `cyberspace` opens the workspace. Every Swarm launch asks whether to continue
+saving into the active project, view/open a project folder, create one, or enter
+**Ghost Mode**, which saves neither prompts nor outcomes. Recent project entries become
+bounded **Actions-on-Objectives memory**, allowing earlier findings to be cross-referenced
+without mixing separate engagements.
+
+### Authorization without broken momentum
+
+Cyberspace is for owned systems, labs, CTFs, training ranges, and explicitly authorized
+assessments. If an objective mentions a lab or home network, the prompt asks whether
+targets are **owned**, **authorized**, or **unauthorized**. Confirmed scope is attached to
+that objective so execution continues without repeating the question. Unauthorized
+targets are stopped.
+
+### Visible execution and resilient models
+
+The CLI shows the Kill Chain stage, delegated work, tool calls, result progress, and
+model failover. Setup queries live provider model lists when available and still allows
+an exact custom ID. If a model rejects a request, Cyberspace preserves the transcript,
+visibly tries another model from the same provider, and continues. Credential, quota,
+and network failures are reported because switching models cannot repair them.
 
 ## Installation
 
@@ -290,7 +317,7 @@ cyberspace providers        # list every LLM you can connect
 | 1 | **Ollama** | native | no | local, free, offline (great for the Pi) |
 | 2 | **OpenAI** (GPT) | openai-compat | yes | strong, reliable tool-calling |
 | 3 | **Anthropic** (Claude) | native | yes | excellent reasoning |
-| 4 | **z.ai** (GLM) | openai-compat | yes | Zhipu GLM models (glm-4.6) |
+| 4 | **z.ai** (GLM) | openai-compat | yes | GLM 5.2 with function calling |
 | 5 | **DeepSeek** | openai-compat | yes | great-value reasoning models |
 | 6 | **Groq** | openai-compat | yes | extremely fast inference |
 | 7 | **OpenRouter** | openai-compat | yes | one key → OpenAI/Claude/Gemini/Llama/free |
@@ -337,10 +364,11 @@ cyberspace swarm
 This drops you into a chat. Just type what you want in plain English:
 
 ```
-mission> scan 192.168.1.0/24, find any web apps, test them for vulnerabilities, then write a report
+cyberspace objective> scan 192.168.1.0/24, find web apps, test them, then write a report
 ```
 
-The Orchestrator breaks that into steps and hands each one to the right agent.
+Cyberspace maps that objective into the relevant Cyber Kill Chain stages, shows each
+tool action live, and carries findings forward to Actions on Objectives.
 You watch the work happen, then get a summary.
 
 **But you can also run each tool yourself.** Here's how to use every part of the
@@ -350,10 +378,17 @@ system directly from the command line.
 
 ## Walkthrough: each platform
 
-### 1. AirBender 📶 — scanning networks
+### 1. AirBender 📶 — fast, cross-checked Reconnaissance
 
 AirBender finds every device on a network and figures out what each one is running.
-It wraps tools like `nmap` (a network scanner) and chains them together.
+It wraps tools like `nmap` (a network scanner) and chains them together. For local
+networks, `local-recon` runs read-only nmap host discovery, netdiscover, and arp-scan
+concurrently when installed, merges their device lists, and enriches the result with
+ports and service versions. Missing Pi packages degrade gracefully.
+
+```bash
+cyberspace airbender local-recon 192.168.1.0/24
+```
 
 ```bash
 # STEP 1: Check what's installed
@@ -634,11 +669,12 @@ cyberspace robodaddy train offensive_pentest --provider vastai --offer 123456
 
 ---
 
-## Projects — save your work by task
+## Projects — your Actions-on-Objectives prompt library
 
 Projects let you keep separate prompt histories for different tasks. When a
 project is **active**, every prompt you send to the AI (in `swarm` or `agent`)
-is automatically saved to that project's folder. Later you can open the folder
+is automatically saved to that project's folder and becomes scoped Kill Chain memory.
+Later you can open the folder
 and see every prompt you used.
 
 ```bash
@@ -666,7 +702,8 @@ cyberspace project delete "surveillance in chicago"
 ```
 
 Projects are stored as folders under `~/.cyberspace/projects/`. Each one has a
-`prompts.jsonl` file with every prompt and the AI's response, timestamped.
+`prompts.jsonl` file with every prompt and the AI's response, timestamped. Choose
+Ghost Mode when Swarm opens if a session should not be written to this library.
 
 ---
 
@@ -695,7 +732,7 @@ cyberspace tools
 
 | Platform | What it is | Key command |
 |---|---|---|
-| **AirBender** 📶 | Network scanner | `cyberspace airbender recon 192.168.1.0/24` |
+| **AirBender** 📶 | Reconnaissance and cross-checked network discovery | `cyberspace airbender local-recon 192.168.1.0/24` |
 | **ShadowDragon** 🐍 | Web and exploit tools | `cyberspace shadowdragon full-assault http://target` |
 | **IceBerg** 🧊 | Privacy browser + web search | `cyberspace iceberg secure find "query" --mode dark` |
 | **StickEm** 🔌 | Hardware (WiFi + router + serial) | `cyberspace stickem hardware` |

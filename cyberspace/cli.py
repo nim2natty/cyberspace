@@ -25,7 +25,7 @@ from .host import is_available
 console = Console()
 app = typer.Typer(
     help="cyberspace - an open-source agentic pentest platform.",
-    no_args_is_help=True, rich_markup_mode="rich", add_completion=False,
+    no_args_is_help=False, rich_markup_mode="rich", add_completion=False,
 )
 
 
@@ -35,9 +35,13 @@ def _autoload() -> None:
 
 
 @app.callback(invoke_without_command=True)
-def _root(version: bool = typer.Option(False, "--version", "-V")):
+def _root(ctx: typer.Context, version: bool = typer.Option(False, "--version", "-V")):
     if version:
         console.print(f"cyberspace {__version__}")
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        from .ui.dashboard import interactive
+        interactive()
 
 
 @app.command()
@@ -74,19 +78,22 @@ def agent():
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
-            a.ask(q)
+            from .ui.dashboard import _authorize_objective
+            q = _authorize_objective(q)
+            if q is not None:
+                a.ask(q)
 
 
 @app.command()
 def dashboard():
-    """The multi-agent swarm hub (default). Command the whole team from one space."""
+    """Open the Cyber Kill Chain workspace (the default `cyberspace` view)."""
     from .ui.dashboard import interactive
     interactive()
 
 
 @app.command()
 def swarm(roe: str = typer.Option("", "--roe", help="path to a Rules of Engagement .md file")):
-    """Launch the multi-agent swarm directly. The Orchestrator commands the team."""
+    """Launch the seven-stage Cyber Kill Chain workspace directly."""
     from .ui.dashboard import run_swarm
     if roe:
         from pathlib import Path
@@ -111,7 +118,7 @@ def quickstart():
         run_wizard(force=True)
     else:
         console.print("[green]Agent already configured. Skipping to the swarm.[/green]")
-    console.print("\n[yellow]Step 2:[/yellow] launch the multi-agent swarm.")
+    console.print("\n[yellow]Step 2:[/yellow] launch the Cyber Kill Chain workspace.")
     from .ui.dashboard import run_swarm
     run_swarm()
 

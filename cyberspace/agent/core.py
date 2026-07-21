@@ -15,7 +15,7 @@ from typing import Optional
 from rich.console import Console
 
 from ..modules.base import TOOL_REGISTRY, Tool
-from .llm import AgentResponse, LLMConfig, get_provider
+from .llm import AgentResponse, LLMConfig, get_provider, chat_with_failover
 
 DEFAULT_SYSTEM = (
     "You are cyberbot, an agentic assistant for a penetration-testing platform "
@@ -90,6 +90,8 @@ def build_system_prompt(base: str = "") -> str:
         from ..memory import context_block
         from ..projects import get_active, search as project_search
         prompt = (base or DEFAULT_SYSTEM) + context_block()
+        from ..projects import context_block as project_context
+        prompt += project_context()
         # Tell the agent about the active project and that it can auto-switch.
         active = get_active()
         if active:
@@ -145,10 +147,13 @@ class Agent:
 
     def ask(self, prompt: str) -> str:
         """One user turn. Runs the tool loop until the LLM gives a final answer."""
+        # Project selection can change between turns; refresh its scoped memory.
+        self.messages[0]["content"] = build_system_prompt(self.cfg.system_prompt or DEFAULT_SYSTEM)
         self.messages.append({"role": "user", "content": prompt})
 
         for _ in range(self.max_iterations):
-            resp: AgentResponse = self.provider.chat(self.messages, self.tools)
+            resp: AgentResponse = chat_with_failover(
+                self.provider, self.messages, self.tools, self.console)
             self.messages.append(self._assistant_msg(resp))
 
             if not resp.tool_calls:
@@ -163,6 +168,7 @@ class Agent:
                 self.messages.append({
                     "role": "tool",
                     "name": call.name,
+                    "tool_call_id": call.id,
                     "content": result,
                 })
 
@@ -186,7 +192,7 @@ class Agent:
         msg = {"role": "assistant", "content": resp.text}
         if resp.tool_calls:
             msg["tool_calls"] = [
-                {"id": f"call_{i}", "type": "function",
+                {"id": c.id or f"call_{i}", "type": "function",
                  "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
                 for i, c in enumerate(resp.tool_calls)
             ]

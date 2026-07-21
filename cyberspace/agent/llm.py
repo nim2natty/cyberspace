@@ -52,6 +52,7 @@ class LLMConfig:
 class ToolCall:
     name: str
     arguments: dict
+    id: str = ""
 
 
 @dataclass
@@ -143,9 +144,9 @@ class OllamaProvider(LLMProvider):
         data = self._post(url, payload)
         msg = data.get("message", {})
         calls = [
-            ToolCall(name=c["function"]["name"],
+            ToolCall(name=c["function"]["name"], id=c.get("id", f"call_{i}"),
                      arguments=_safe_json(c["function"].get("arguments", "{}")))
-            for c in msg.get("tool_calls", [])
+            for i, c in enumerate(msg.get("tool_calls", []))
         ]
         return AgentResponse(text=msg.get("content", "") or "", tool_calls=calls, raw=data)
 
@@ -174,9 +175,9 @@ class OpenAIProvider(LLMProvider):
         data = self._post(self._url(), payload, headers)
         choice = data["choices"][0]["message"]
         calls = [
-            ToolCall(name=c["function"]["name"],
+            ToolCall(name=c["function"]["name"], id=c.get("id", f"call_{i}"),
                      arguments=_safe_json(c["function"].get("arguments", "{}")))
-            for c in choice.get("tool_calls", [])
+            for i, c in enumerate(choice.get("tool_calls", []))
         ]
         return AgentResponse(text=choice.get("content") or "", tool_calls=calls, raw=data)
 
@@ -192,7 +193,7 @@ class AnthropicProvider(LLMProvider):
             "content-type": "application/json",
         }
         sys_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-        conv = [m for m in messages if m["role"] != "system"]
+        conv = _anthropic_messages([m for m in messages if m["role"] != "system"])
         payload = {
             "model": self.cfg.model,
             "max_tokens": 2048,
@@ -213,7 +214,8 @@ class AnthropicProvider(LLMProvider):
             if block["type"] == "text":
                 text += block["text"]
             elif block["type"] == "tool_use":
-                calls.append(ToolCall(name=block["name"], arguments=block.get("input", {})))
+                calls.append(ToolCall(name=block["name"], arguments=block.get("input", {}),
+                                      id=block.get("id", "")))
         return AgentResponse(text=text, tool_calls=calls, raw=data)
 
 
@@ -224,6 +226,33 @@ def _safe_json(s):
         return json.loads(s)
     except Exception:
         return {}
+
+
+def _anthropic_messages(messages: list[dict]) -> list[dict]:
+    """Translate the internal OpenAI-like tool transcript to Anthropic blocks."""
+    out = []
+    for msg in messages:
+        role = msg.get("role")
+        if role == "assistant" and msg.get("tool_calls"):
+            blocks = []
+            if msg.get("content"):
+                blocks.append({"type": "text", "text": msg["content"]})
+            for call in msg["tool_calls"]:
+                fn = call.get("function", {})
+                blocks.append({"type": "tool_use", "id": call.get("id", ""),
+                               "name": fn.get("name", ""),
+                               "input": _safe_json(fn.get("arguments", {}))})
+            out.append({"role": "assistant", "content": blocks})
+        elif role == "tool":
+            block = {"type": "tool_result", "tool_use_id": msg.get("tool_call_id", ""),
+                     "content": str(msg.get("content", ""))}
+            if out and out[-1].get("role") == "user" and isinstance(out[-1].get("content"), list):
+                out[-1]["content"].append(block)
+            else:
+                out.append({"role": "user", "content": [block]})
+        else:
+            out.append({"role": role, "content": msg.get("content", "")})
+    return out
 
 
 def get_provider(cfg: LLMConfig) -> LLMProvider:
@@ -247,3 +276,66 @@ def get_provider(cfg: LLMConfig) -> LLMProvider:
     if api_style == "anthropic":
         return AnthropicProvider(cfg)
     return OpenAIProvider(cfg)
+
+
+def chat_with_failover(provider: LLMProvider, messages: list[dict], tools: list[Tool],
+                       console=None) -> AgentResponse:
+    """Continue a request on another current model after a model-specific failure."""
+    try:
+        return provider.chat(messages, tools)
+    except ProviderError as first_error:
+        text = str(first_error).lower()
+        # A different model cannot repair credentials, quota, or connectivity.
+        if any(marker in text for marker in ("http 401", "http 403", "http 429",
+                                              "could not connect", "timed out")):
+            raise
+        candidates = _available_models(provider)
+        original = provider.cfg.model
+        alternatives = [m for m in candidates if m and m != original][:5]
+        if not alternatives:
+            raise
+        if console:
+            console.print(f"[yellow]Model {original} failed; preserving the objective and trying "
+                          f"{len(alternatives)} available alternative(s).[/yellow]")
+        last_error = first_error
+        for model in alternatives:
+            provider.cfg.model = model
+            if console:
+                console.print(f"[cyan]↻ model failover:[/cyan] {original} → [bold]{model}[/bold]")
+            try:
+                response = provider.chat(messages, tools)
+                if console:
+                    console.print(f"[green]✓ continued with {model}[/green]")
+                return response
+            except ProviderError as exc:
+                last_error = exc
+                if console:
+                    console.print(f"[dim]  {model} unavailable; trying next model[/dim]")
+        provider.cfg.model = original
+        raise last_error
+
+
+def _available_models(provider: LLMProvider) -> list[str]:
+    """Discover live model IDs, with the reviewed provider catalog as fallback."""
+    spec = get_spec(provider.cfg.provider)
+    fallback = list(spec.models) if spec else []
+    try:
+        if spec and spec.api_style == "ollama":
+            url = f"{provider.cfg.base_url.rstrip('/')}/api/tags"
+            data = provider.client.get(url).json()
+            live = [m.get("name", "") for m in data.get("models", [])]
+        else:
+            if spec and spec.api_style == "anthropic":
+                url = "https://api.anthropic.com/v1/models"
+                headers = {"x-api-key": provider.cfg.api_key,
+                           "anthropic-version": "2023-06-01"}
+            else:
+                url = f"{provider.cfg.base_url.rstrip('/')}/models"
+                headers = ({"Authorization": f"Bearer {provider.cfg.api_key}"}
+                           if provider.cfg.api_key else {})
+            response = provider.client.get(url, headers=headers)
+            response.raise_for_status()
+            live = [m.get("id", "") for m in response.json().get("data", [])]
+        return list(dict.fromkeys([*live, *fallback]))
+    except Exception:
+        return fallback

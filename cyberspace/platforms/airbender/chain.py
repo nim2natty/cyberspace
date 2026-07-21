@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import shlex
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ...host import is_available, missing_hint, run
 from .._common import clean_target, clean_value
 
@@ -21,9 +22,10 @@ NETWORKING_TOOLS = [
 
 def _tool_nmap(target="127.0.0.1", args="-sV -T4", timeout=300):
     if not is_available("nmap"): return missing_hint("nmap")
-    if clean_target(target): return f"invalid target: {target}"
+    targets = shlex.split(str(target))
+    if not targets or any(clean_target(t) for t in targets): return f"invalid target: {target}"
     safe = [a for a in shlex.split(str(args)) if not clean_target(a)]
-    return run("nmap", [*safe, target], timeout=timeout).text()
+    return run("nmap", [*safe, *targets], timeout=timeout).text()
 
 
 def _tool_masscan(target="127.0.0.1", ports="1-1000", rate=1000, timeout=300):
@@ -106,8 +108,33 @@ def _parse_hosts(text: str) -> list[str]:
     return list(dict.fromkeys(re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', text or "")))
 
 
+def _tool_local_recon(target="192.168.1.0/24", timeout=90):
+    """Cross-check local hosts with all installed, read-only discovery tools."""
+    if clean_target(target): return f"invalid target: {target}"
+    probes = {"nmap ping sweep": lambda: _tool_ping_sweep(target, timeout),
+              "netdiscover": lambda: _tool_netdiscover(target, timeout),
+              "arp-scan": lambda: _tool_arp_scan(timeout)}
+    results = {}
+    with ThreadPoolExecutor(max_workers=len(probes)) as pool:
+        pending = {pool.submit(fn): name for name, fn in probes.items()}
+        for future in as_completed(pending):
+            name = pending[future]
+            try:
+                results[name] = future.result()
+            except Exception as exc:
+                results[name] = f"ERROR: {exc}"
+    hosts = sorted(set(_parse_hosts("\n".join(results.values()))))
+    report = [f"Cross-checked {len(probes)} discovery methods; found {len(hosts)} unique IPs.",
+              "Hosts: " + (", ".join(hosts) if hosts else "none")]
+    report.extend(f"\n[{name}]\n{text}" for name, text in results.items())
+    return "\n".join(report)
+
+
 # --- named pipeline steps -------------------------------------------------- #
 CHAIN_STEPS = {
+    "local-discovery": {"desc": "parallel nmap + netdiscover + arp-scan discovery",
+                        "fn": lambda t, **k: _tool_local_recon(target=t),
+                        "parse": _parse_hosts, "output": "hosts"},
     "ping-sweep": {"desc": "discover live hosts on a subnet",
                    "fn": lambda t, **k: _tool_ping_sweep(target=t),
                    "parse": _parse_hosts, "output": "hosts"},
@@ -159,6 +186,8 @@ def run_chain(steps: list[str], target: str, on_event=None) -> dict:
 
 # Predefined pipelines (user-friendly shortcuts).
 PIPELINES = {
+    "local-recon": {"desc": "fast cross-checked LAN discovery -> top ports -> services",
+                    "steps": ["local-discovery", "nmap-top", "service-detect"]},
     "recon": {"desc": "full recon: discover hosts -> scan ports -> detect services",
               "steps": ["ping-sweep", "nmap-top", "service-detect"]},
     "fast-scan": {"desc": "quick: discover hosts -> masscan all ports",

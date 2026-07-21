@@ -1,9 +1,19 @@
-"""cyberspace swarm - the multi-agent orchestration system.
+"""cyberspace swarm - Cyber Kill Chain orchestration.
 
-Inspired by Tandem's swarm pattern: a team of SPECIALIZED sub-agents, each with
-its own role, persona, and scoped toolset, coordinated by a single Orchestrator
-from one clean space. The user talks to the Orchestrator; it delegates to the
-right specialist automatically.
+The swarm operates on the Lockheed Martin Cyber Kill Chain: seven chronological
+stages that describe a complete attack lifecycle. Cyberspace maps the operator's
+objective to the right stage and runs the corresponding specialist with scoped tools.
+
+    1. Reconnaissance  -  map the attack surface
+    2. Weaponization   -  build payloads, select exploits
+    3. Delivery        -  transmit the weapon to the target
+    4. Exploitation    -  trigger the vulnerability
+    5. Installation    -  deploy persistence / implants
+    6. C2              -  establish command and control
+    7. Actions on Obj  -  achieve the objective; LOG everything here
+
+Every prompt the user types is recorded as "Actions on Objectives" memory so the
+system learns how the operator runs attacks and can cross-reference techniques.
 """
 from __future__ import annotations
 
@@ -14,83 +24,104 @@ from typing import Optional
 from rich.console import Console
 
 from .modules.base import TOOL_REGISTRY, Tool
-from .agent.llm import LLMConfig, get_provider
+from .agent.llm import LLMConfig, get_provider, ProviderError, chat_with_failover
 from .agent.core import build_system_prompt
 
 _CONSOLE = Console()
 
 
 @dataclass
-class SubAgentSpec:
+class KillChainStage:
     name: str
     display: str
     emoji: str
     role: str
     system_prompt: str
     tool_prefixes: list[str]
-    tags: list[str] = field(default_factory=list)
+    phase: int  # 1-7 for chronological ordering
 
 
-TEAM: list[SubAgentSpec] = [
-    SubAgentSpec(
-        name="recon", display="Recon", emoji="\U0001f4f6",
-        role="Network reconnaissance specialist",
+# The seven stages of the Cyber Kill Chain. Each maps to a toolset.
+KILL_CHAIN: list[KillChainStage] = [
+    KillChainStage(
+        name="recon", display="Reconnaissance", emoji="\U0001f50d", phase=1,
+        role="Map the target's attack surface",
         system_prompt=(
-            "You are RECON, the team's network reconnaissance specialist. You map the "
-            "target's attack surface: discover live hosts, enumerate ports and services, "
-            "identify technologies using AirBender's tools and chain pipelines. "
-            "Output: a structured inventory of hosts, ports, services."),
+            "You are the RECONNAISSANCE stage of the Cyber Kill Chain. Your job is to "
+            "map the target's attack surface: discover live hosts, enumerate open ports, "
+            "identify running services and technologies. Use AirBender's networking "
+            "tools (nmap, masscan, ping-sweep, dig, whois). Be FAST: prefer quick scans "
+            "(top-ports, -T5, no DNS) over exhaustive ones. Output: a structured "
+            "inventory of hosts, ports, services found."),
         tool_prefixes=["airbender"]),
-    SubAgentSpec(
-        name="exploit", display="Exploit", emoji="\U0001f40d",
-        role="Exploitation specialist",
+    KillChainStage(
+        name="weapon", display="Weaponization", emoji="\U0001f9a0", phase=2,
+        role="Build payloads and select exploits",
         system_prompt=(
-            "You are EXPLOIT, the team's exploitation specialist. You identify "
-            "vulnerabilities using all of Kali's non-networking tools (web, passwords, "
-            "metasploit) and execute exploits within authorized scope. Use ShadowDragon's "
-            "chain pipelines. Output: vulns found, exploits attempted, access gained."),
+            "You are the WEAPONIZATION stage of the Cyber Kill Chain. Based on "
+            "reconnaissance findings, you craft the attack: search for exploits "
+            "(searchsploit), build payloads (msfvenom), prepare web-attack payloads "
+            "(sqlmap, gobuster), and select the right exploit modules. Use "
+            "ShadowDragon's catalog. Output: the weapon ready for delivery."),
         tool_prefixes=["shadowdragon"]),
-    SubAgentSpec(
-        name="ghost", display="Ghost", emoji="\U0001f9ca",
-        role="OPSEC + dark-web specialist",
+    KillChainStage(
+        name="delivery", display="Delivery", emoji="\U0001f4e7", phase=3,
+        role="Transmit the weapon to the target",
         system_prompt=(
-            "You are GHOST, the team's OPSEC and intelligence specialist. You manage "
-            "anonymity (anti-detect, Tor, fingerprints) and conduct dark-web OSINT via "
-            "IceBerg's secure tool. Choose brightside (clearnet) or darkside (Tor). "
-            "Output: findings, sources, exposure assessments."),
+            "You are the DELIVERY stage of the Cyber Kill Chain. You transmit the "
+            "crafted weapon to the target. This includes browsing target web apps with "
+            "the IceBerg stealth browser, delivering payloads via web requests, or "
+            "using social-engineering vectors. Use IceBerg's OPSEC browser to interact "
+            "with targets while staying hidden. Output: confirmation of delivery."),
         tool_prefixes=["iceberg"]),
-    SubAgentSpec(
-        name="hardware", display="Hardware", emoji="\U0001f50c",
-        role="Wireless + IoT hardware operator",
+    KillChainStage(
+        name="exploit", display="Exploitation", emoji="\U0001f4a5", phase=4,
+        role="Trigger the vulnerability",
         system_prompt=(
-            "You are HARDWARE, the team's wireless and IoT specialist. You operate the "
-            "ESP32 Marauder (802.11 attacks), FT232 serial bridge, and OpenWrt router "
-            "via StickEm. Lab-scoped only. Output: wireless recon, handshakes, serial access."),
+            "You are the EXPLOITATION stage of the Cyber Kill Chain. You trigger the "
+            "vulnerability to gain access. Run exploits (metasploit), SQL injection "
+            "(sqlmap), web attacks (nikto, gobuster), and credential attacks. Use "
+            "ShadowDragon's full-assault chain. Output: access gained, vulns exploited."),
+        tool_prefixes=["shadowdragon"]),
+    KillChainStage(
+        name="install", display="Installation", emoji="\U0001f4e1", phase=5,
+        role="Deploy persistence and implants",
+        system_prompt=(
+            "You are the INSTALLATION stage of the Cyber Kill Chain. You deploy "
+            "persistence mechanisms: backdoors, hardware implants, or persistent access "
+            "on compromised routers/IoT. Use StickEm to operate the ESP32 Marauder, FT232 "
+            "serial bridge, or OpenWrt router for hardware-level installation. "
+            "Output: persistent access established."),
         tool_prefixes=["stickem"]),
-    SubAgentSpec(
-        name="smith", display="Smith", emoji="\U0001f916",
-        role="AI model engineer",
+    KillChainStage(
+        name="c2", display="Command & Control (C2)", emoji="\U0001f5f3", phase=6,
+        role="Establish covert command channels",
         system_prompt=(
-            "You are SMITH, the team's AI engineer. You use RoboDaddy to recommend "
-            "datasets, build QLoRA plans, run dry-run training jobs, dispatch Vast.ai "
-            "training, and configure local Ollama serving. Output: dataset options, "
-            "training plans, progress files, stats, endpoints, and API keys."),
+            "You are the COMMAND & CONTROL stage of the Cyber Kill Chain. You establish "
+            "covert communication channels with the target: Tor-based C2, encrypted "
+            "channels, OPSEC hardening. Use IceBerg's anonymity tools (Tor, anti-detect "
+            "profiles, proxychains). Output: C2 channel established."),
+        tool_prefixes=["iceberg"]),
+    KillChainStage(
+        name="objectives", display="Actions on Objectives", emoji="\U0001f3af", phase=7,
+        role="Achieve the objective + log everything",
+        system_prompt=(
+            "You are the ACTIONS ON OBJECTIVES stage of the Cyber Kill Chain. The attack "
+            "path is complete; now achieve the goal. This includes data collection, "
+            "reporting, and CRITICALLY: logging the full attack narrative so it becomes "
+            "cross-referencable memory for future operations. Use RoboDaddy for custom "
+            "model needs. Synthesize all findings into a clear report. Output: the "
+            "objective achieved + a full kill-chain narrative."),
         tool_prefixes=["robodaddy"]),
-    SubAgentSpec(
-        name="scribe", display="Scribe", emoji="\U0001f4dd",
-        role="Report + analysis specialist",
-        system_prompt=(
-            "You are SCRIBE, the team's reporting specialist. Synthesize findings from "
-            "the engagement into clear, business-impact-focused reports with remediation. "
-            "You read conversation history and memory to produce the deliverable."),
-        tool_prefixes=[]),
 ]
 
+KILL_CHAIN_STAGES = [s.name for s in KILL_CHAIN]
 
-def get_agent(name: str) -> Optional[SubAgentSpec]:
-    for a in TEAM:
-        if a.name == name:
-            return a
+
+def get_stage(name: str) -> Optional[KillChainStage]:
+    for s in KILL_CHAIN:
+        if s.name == name:
+            return s
     return None
 
 
@@ -100,134 +131,198 @@ def _scoped_tools(prefixes: list[str]) -> list[Tool]:
     return [t for t in TOOL_REGISTRY.all() if any(t.name.startswith(p + ".") for p in prefixes)]
 
 
+def kill_chain_brief() -> str:
+    """One-line-per-stage summary for display."""
+    return "\n".join(f"  {s.phase}. {s.emoji} {s.display:<22} {s.role}" for s in KILL_CHAIN)
+
+
+# Backwards compat: old code referenced TEAM/team_brief/get_agent
+TEAM = KILL_CHAIN
+
+
+def get_agent(name: str):
+    return get_stage(name)
+
+
 def team_brief() -> str:
-    """One-line-per-agent summary for display."""
-    return "\n".join(f"  {a.emoji} {a.display:<10} {a.role}" for a in TEAM)
+    return kill_chain_brief()
 
 
-ORCHESTRATOR_SYSTEM = """You are the ORCHESTRATOR, the mission commander of the cyberspace agent swarm.
+_STAGE_KEYWORDS = {
+    "recon": ["scan", "discover", "find", "map", "enumerate", "ping", "nmap", "host",
+              "device", "network", "port", "service", "who is on", "what's on",
+              "what devices", "what services", "live host", "subnet"],
+    "weapon": ["exploit", "payload", "prepare", "build", "craft", "searchsploit",
+               "msfvenom", "weapon", "select exploit"],
+    "delivery": ["deliver", "send", "browse", "navigate", "open url", "visit",
+                 "phishing", "social engineer", "inject web", "post to"],
+    "exploit": ["run exploit", "attack", "inject", "sql injection", "sqlmap",
+                "metasploit", "msfconsole", "brute force", "crack", "break in",
+                "gain access", "full assault", "vulnerability test"],
+    "install": ["install", "persistent", "backdoor", "implant", "deploy",
+                "hardware", "serial", "router", "openwrt", "marauder"],
+    "c2": ["c2", "command and control", "tor", "anonymous", "covert",
+           "proxy", "hidden channel", "reverse shell", "beacon"],
+    "objectives": ["report", "summarize", "objective", "exfiltrate", "collect",
+                   "what did we find", "results", "findings", "write up"],
+}
 
-You lead a team of SPECIALIZED sub-agents. You do NOT run tools yourself - you DELEGATE to the right specialist.
 
-## Your team
-- **Recon** (📶): network reconnaissance. Call for: scanning, enumeration, mapping attack surface.
-- **Exploit** (🐍): exploitation - web, creds, metasploit. Call for: attacking services, web testing.
-- **Ghost** (🧊): OPSEC + dark-web intelligence. Call for: staying hidden, dark-web OSINT.
-- **Hardware** (🔌): wireless/IoT - ESP32, FT232, router. Call for: WiFi attacks, serial, lab hardware.
-- **Smith** (🤖): AI engineering. Call for: dataset selection, custom-model training, local serving.
-- **Scribe** (📝): reporting. Call for: when engagement is done and you need a deliverable.
+def detect_stage(prompt: str) -> str:
+    """Detect which kill chain stage the user's prompt maps to."""
+    p = (prompt or "").lower()
+    best, best_score = "recon", 0
+    for stage, keywords in _STAGE_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in p)
+        if score > best_score:
+            best, best_score = stage, score
+    return best
 
-## You choose the attack vector
-When the user describes a goal in plain language (e.g. "check if my router is
-vulnerable" or "scan that web server"), DO NOT ask them which tool or agent to
-use. Figure out the best approach yourself and delegate to the right agent. Run it.
-Explain the results in plain language.
 
-## How to operate
-1. Understand the objective. 2. Break it into phases and delegate each to the RIGHT specialist.
-3. Chain their outputs (Recon finds web app -> Exploit tests it -> Scribe reports).
-4. Stay within authorized scope. 5. When done, delegate to Scribe for the report.
+WORKFLOW_SYSTEM = """You are cyberspace, a Cyber Kill Chain workflow engine.
+
+You operate on the 7-stage Lockheed Martin Cyber Kill Chain. You map the operator's
+objective to the correct stage and delegate to the specialist for that stage.
+
+## The Cyber Kill Chain (7 chronological stages)
+1. **Reconnaissance**: Map the attack surface. Use for: scanning, host discovery, port enumeration.
+2. **Weaponization**: Build payloads, select exploits. Use for: finding exploits, crafting payloads.
+3. **Delivery**: Transmit the weapon. Use for: browsing targets, web delivery.
+4. **Exploitation**: Trigger the vulnerability. Use for: running exploits, SQL injection, brute force.
+5. **Installation**: Deploy persistence/implants. Use for: backdoors, hardware, router access.
+6. **Command & Control**: Establish covert channels. Use for: Tor, anonymity, reverse shells.
+7. **Actions on Objectives**: Achieve the goal + log everything. Use for: reporting, data collection.
+
+## You choose the attack vector and stage
+When the user describes a goal in plain language, DO NOT ask them which tool or stage
+to use. Map it to the correct kill chain stage and delegate. Run it. Explain results
+in plain language, stating WHICH STAGE of the kill chain you're in.
+
+## Speed and coverage are critical
+Prefer FAST operations. For local-network inventory, use airbender.chain with the
+local-recon pipeline so independent discovery methods run concurrently and results are
+cross-checked; do not rely on nmap alone. Do not run exhaustive scans unless requested.
 
 ## You manage projects
-If the user mentions a topic that matches an existing project (e.g. "open my chicago
-work"), call project.search to find it. If one matches, call project.open to switch
-to it. If no project exists, call project.create with a sensible name. Prompts are
-auto-saved to the active project.
+If the user mentions a topic matching an existing project, call project.search to find
+it, project.open to switch to it, or project.create if none exists. Prompts are
+auto-saved to the active project as Actions on Objectives memory.
 """
 
 
 class Swarm:
-    """The multi-agent team. Orchestrator delegates; sub-agents execute."""
+    """Execute requests through the seven-stage Cyber Kill Chain."""
 
-    def __init__(self, cfg: LLMConfig, console: Optional[Console] = None):
+    def __init__(self, cfg: LLMConfig, console: Optional[Console] = None,
+                 ghost_mode: bool = False):
         self.cfg = cfg
         self.console = console or _CONSOLE
-        self.messages = [{"role": "system", "content": build_system_prompt(ORCHESTRATOR_SYSTEM)}]
+        self.ghost_mode = ghost_mode
+        self.messages = [{"role": "system", "content": build_system_prompt(WORKFLOW_SYSTEM)}]
         self.max_iterations = 20
         self.provider = get_provider(cfg)
-        self.agent_logs = {a.name: [] for a in TEAM}
+        self.agent_logs = {s.name: [] for s in KILL_CHAIN}
+        self.current_stage = ""
 
     def _delegate_tool(self) -> Tool:
         def _fn(agent_name="", task=""):
             return self.delegate(agent_name, task)
         return Tool(name="swarm.delegate",
-            description="Delegate a task to a specialized sub-agent. Agents: " +
-            ", ".join(f"{a.name} ({a.role})" for a in TEAM),
+            description="Delegate a task to a Cyber Kill Chain stage. Stages: " +
+            ", ".join(f"{s.name} ({s.display})" for s in KILL_CHAIN),
             parameters={"type": "object", "properties": {
-                "agent_name": {"type": "string", "description": "one of: " + ", ".join(a.name for a in TEAM)},
-                "task": {"type": "string"}}, "required": ["agent_name", "task"]}, fn=_fn)
+                "agent_name": {"type": "string", "description": "kill chain stage: " +
+                 ", ".join(s.name for s in KILL_CHAIN)},
+                "task": {"type": "string", "description": "the specific task for this stage"}},
+                "required": ["agent_name", "task"]},
+            fn=_fn)
 
-    def delegate(self, agent_name: str, task: str) -> str:
-        spec = get_agent(agent_name)
+    def delegate(self, stage_name: str, task: str) -> str:
+        """Delegate a task to the named kill chain stage specialist."""
+        spec = get_stage(stage_name)
         if not spec:
-            return f"ERROR: no agent '{agent_name}'. Team: {', '.join(a.name for a in TEAM)}"
-        self.console.print(f"   [dim]delegating to[/dim] {spec.emoji} "
-                           f"[bold magenta]{spec.display}[/bold magenta]: {task[:80]}")
-        if not spec.tool_prefixes:
-            from .memory import context_block, recent_episodes
-            ctx = "Recent engagement activity:\n"
-            for ep in recent_episodes(30):
-                ctx += f"- [{ep.get('platform','')}] {ep.get('action','')}: {ep.get('result_summary','')[:120]}\n"
-            return self._freeform(spec, task, ctx + "\n" + context_block())
-        return self._run_subagent(spec, task)
-
-    def _run_subagent(self, spec: SubAgentSpec, task: str) -> str:
+            return (f"ERROR: unknown kill chain stage '{stage_name}'. "
+                    f"Available: {', '.join(s.name for s in KILL_CHAIN)}")
+        self.current_stage = spec.name
+        self.console.print(
+            f"\n  {spec.emoji} [bold yellow]STAGE {spec.phase}: {spec.display}[/bold yellow]")
+        self.console.print(f"  [dim]Task: {task[:120]}[/dim]\n")
         tools = _scoped_tools(spec.tool_prefixes)
         messages = [{"role": "system", "content": build_system_prompt(spec.system_prompt)},
                     {"role": "user", "content": task}]
-        result = ""
-        for _ in range(10):
-            resp = get_provider(self.cfg).chat(messages, tools)
-            m = {"role": "assistant", "content": resp.text}
-            if resp.tool_calls:
-                m["tool_calls"] = [{"id": f"call_{i}", "type": "function",
-                     "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
-                    for i, c in enumerate(resp.tool_calls)]
-            messages.append(m)
+        try:
+            resp = chat_with_failover(self.provider, messages, tools, self.console)
+        except ProviderError as e:
+            self.console.print(f"  [red]{spec.display} error: {e}[/red]")
+            return f"STAGE ERROR ({spec.display}): {e}"
+        result = resp.text
+        # Run any tool calls the stage specialist requests.
+        for _ in range(6):
             if not resp.tool_calls:
-                result = resp.text; break
+                break
+            messages.append(self._assistant_msg(resp))
             for call in resp.tool_calls:
-                tool = next((t for t in tools if t.name == call.name), None)
-                if not tool:
-                    out = f"ERROR: '{call.name}' not available to {spec.display}"
-                else:
-                    self.console.print(f"      [dim]{spec.display} calls[/dim] [cyan]{call.name}[/cyan]")
+                self.console.print(
+                    f"  [dim]{spec.emoji} {spec.display} -> calling[/dim] [cyan]{call.name}[/cyan]")
+                tool = TOOL_REGISTRY.get(call.name)
+                if tool:
                     try:
                         out = str(tool.fn(**call.arguments))
                         from .memory import record
                         record(spec.name, call.name, call.arguments, out[:300])
                     except Exception as e:
                         out = f"ERROR: {e}"
-                messages.append({"role": "tool", "name": call.name, "content": out})
-        else:
-            result = result or "(sub-agent reached its tool limit)"
+                else:
+                    out = f"ERROR: tool '{call.name}' not found."
+                self.console.print(f"  [dim]↳ {call.name} returned {len(out)} characters[/dim]")
+                messages.append({"role": "tool", "name": call.name,
+                                 "tool_call_id": call.id, "content": out})
+            try:
+                resp = chat_with_failover(self.provider, messages, tools, self.console)
+            except ProviderError as e:
+                self.console.print(f"  [red]{spec.display} error: {e}[/red]")
+                return f"STAGE ERROR ({spec.display}): {e}"
+            result = resp.text or result
+        result = result or f"({spec.display} complete)"
         self.agent_logs[spec.name].append(f"Task: {task}\nResult: {result[:500]}")
-        self.console.print(f"   [dim]{spec.emoji} {spec.display} done[/dim]")
+        self.console.print(f"  [dim]{spec.emoji} {spec.display} done[/dim]\n")
+        # Record this stage's outcome in Actions on Objectives memory.
+        self._record_objective(spec, task, result)
         return result[:4000]
 
-    def _freeform(self, spec: SubAgentSpec, task: str, context: str) -> str:
-        messages = [{"role": "system", "content": build_system_prompt(spec.system_prompt)},
-                    {"role": "user", "content": context + "\n\nTask: " + task}]
-        resp = get_provider(self.cfg).chat(messages, [])
-        self.agent_logs[spec.name].append(f"Task: {task}\nResult: {resp.text[:500]}")
-        return resp.text
+    def _record_objective(self, spec: KillChainStage, task: str, result: str) -> None:
+        """Save every kill-chain action as cross-referenceable objective memory."""
+        try:
+            from .memory import record
+            record(platform="kill_chain", action=f"{spec.phase}_{spec.name}",
+                   args={"stage": spec.display, "task": task},
+                   result_summary=result[:300], intent=spec.name)
+        except Exception:
+            pass
 
     def ask(self, prompt: str) -> str:
+        """One user turn through the Cyber Kill Chain."""
+        # Refresh project-scoped Actions-on-Objectives memory every turn.
+        self.messages[0]["content"] = build_system_prompt(WORKFLOW_SYSTEM)
+        # Detect and announce the stage for the user's benefit.
+        stage = detect_stage(prompt)
+        spec = get_stage(stage)
+        if spec:
+            self.console.print(f"\n  [bold magenta]>> Kill Chain stage detected: "
+                               f"{spec.emoji} {spec.display} (phase {spec.phase})[/bold magenta]\n")
         self.messages.append({"role": "user", "content": prompt})
+        # Record prompt as Actions on Objectives memory.
+        if not self.ghost_mode:
+            self._save_objective_prompt(prompt)
         dt = self._delegate_tool()
         from .agent.core import _project_tools
         all_tools = [dt] + _project_tools()
         for _ in range(self.max_iterations):
-            resp = self.provider.chat(self.messages, all_tools)
-            m = {"role": "assistant", "content": resp.text}
-            if resp.tool_calls:
-                m["tool_calls"] = [{"id": f"call_{i}", "type": "function",
-                     "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
-                    for i, c in enumerate(resp.tool_calls)]
-            self.messages.append(m)
+            resp = chat_with_failover(self.provider, self.messages, all_tools, self.console)
+            self.messages.append(self._assistant_msg(resp))
             if not resp.tool_calls:
                 self.console.print()
-                self.console.print(f"[green]orchestrator>[/green] {resp.text}")
+                self.console.print(f"[green]cyberspace [{spec.display if spec else 'Kill Chain'}]>[/green] {resp.text}")
                 self._save_to_project(prompt, resp.text)
                 return resp.text
             for call in resp.tool_calls:
@@ -245,17 +340,39 @@ class Swarm:
                     result = _project_create(call.arguments.get("name", ""),
                                              call.arguments.get("description", ""))
                 else:
-                    result = "ERROR: orchestrator can only use swarm.delegate + project tools"
-                self.messages.append({"role": "tool", "name": call.name, "content": result})
-        self.console.print("[yellow](orchestrator reached delegation limit)[/yellow]")
+                    result = "ERROR: workflow can only use swarm.delegate + project tools"
+                self.messages.append({"role": "tool", "name": call.name,
+                                      "tool_call_id": call.id, "content": result})
+        self.console.print("[yellow](Cyber Kill Chain reached its step limit)[/yellow]")
         return ""
+
+    @staticmethod
+    def _assistant_msg(resp) -> dict:
+        msg = {"role": "assistant", "content": resp.text}
+        if resp.tool_calls:
+            msg["tool_calls"] = [
+                {"id": c.id or f"call_{i}", "type": "function",
+                 "function": {"name": c.name, "arguments": json.dumps(c.arguments)}}
+                for i, c in enumerate(resp.tool_calls)]
+        return msg
+
+    def _save_objective_prompt(self, prompt: str) -> None:
+        """Record the user's prompt as Actions on Objectives memory."""
+        try:
+            from .memory import record
+            record(platform="kill_chain", action="user_objective",
+                   args={"prompt": prompt}, result_summary="", intent="user_input")
+        except Exception:
+            pass
 
     def _save_to_project(self, prompt: str, response: str) -> None:
         """Auto-save this prompt+response to the active project."""
+        if self.ghost_mode:
+            return
         try:
             from .projects import get_active, add_prompt
             active = get_active()
             if active:
-                add_prompt(active, prompt, response, source="swarm")
+                add_prompt(active, prompt, response, source="kill_chain")
         except Exception:
             pass

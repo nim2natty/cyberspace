@@ -22,7 +22,7 @@ def _tool_chain(pipeline="", steps="", target="", **_):
     elif pipeline and pipeline in C.PIPELINES:
         step_list = C.PIPELINES[pipeline]["steps"]
     else:
-        step_list = ["ping-sweep", "nmap-top"]
+        step_list = ["local-discovery", "nmap-top"]
     results = C.run_chain(step_list, target)
     return "\n---\n".join(f"[{k}]\n{v}" for k, v in results.items())
 
@@ -66,7 +66,7 @@ class AirBenderModule(Module):
                  parameters={"type":"object","properties":{"domain":{"type":"string"},
                   "rtype":{"type":"string","default":"A"}},"required":["domain"]}, fn=C._tool_dig))
         reg(Tool(name="airbender.chain",
-                 description="Run an interlinked networking pipeline. pipelines: "+
+                 description="Run an interlinked networking pipeline. For local device inventory use local-recon; it cross-checks nmap, netdiscover and arp-scan concurrently. pipelines: "+
                  ", ".join(C.PIPELINES)+". steps: "+", ".join(C.CHAIN_STEPS),
                  parameters={"type":"object","properties":{"pipeline":{"type":"string"},
                   "steps":{"type":"string","description":"custom steps separated by '->'"},
@@ -127,6 +127,10 @@ class AirBenderModule(Module):
         def _recon(target: str = typer.Argument(...)):
             """Full recon: discover hosts -> scan ports -> detect services."""
             _run_pipeline("recon", target, console)
+        @app.command("local-recon")
+        def _local_recon(target: str = typer.Argument("192.168.1.0/24")):
+            """Fast LAN inventory using multiple discovery tools, then service enrichment."""
+            _run_pipeline("local-recon", target, console)
         @app.command("fast-scan")
         def _fast(target: str = typer.Argument(...)):
             """Quick: discover hosts -> masscan all ports."""

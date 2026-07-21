@@ -54,6 +54,27 @@ def _list_ollama_models(base_url: str) -> list[str]:
         return []
 
 
+def _discover_models(spec, base_url: str, api_key: str) -> list[str]:
+    """Ask the configured provider for its current model IDs."""
+    if spec.api_style == "ollama":
+        return _list_ollama_models(base_url)
+    if not base_url:
+        return []
+    import httpx
+    if spec.api_style == "anthropic":
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+        url = "https://api.anthropic.com/v1/models"
+    else:
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        url = f"{base_url.rstrip('/')}/models"
+    try:
+        response = httpx.get(url, headers=headers, timeout=10.0)
+        response.raise_for_status()
+        return sorted({str(item["id"]) for item in response.json().get("data", []) if item.get("id")})
+    except Exception:
+        return []
+
+
 def _gather_ollama(spec) -> tuple[str, str, str]:
     """Returns (base_url, api_key, model) for Ollama."""
     base_url = spec.base_url
@@ -123,8 +144,12 @@ def run_wizard(force: bool = False) -> LLMConfig:
         t.add_row(str(i), spec.display, keycol, spec.note)
     console.print(t)
 
-    choice = Prompt.ask("Pick a provider (number or name)", default="1")
-    spec = resolve_choice(choice)
+    spec = None
+    while spec is None:
+        choice = Prompt.ask("Pick a provider (number or name)", default="1")
+        spec = resolve_choice(choice)
+        if spec is None:
+            console.print("[red]Unknown provider. Choose a number or exact provider name above.[/red]")
     console.print(f"[green]Selected:[/green] {spec.display}")
 
     # 2) gather connection details per provider
@@ -154,14 +179,17 @@ def run_wizard(force: bool = False) -> LLMConfig:
         else:
             if spec.key_url:
                 console.print(f"[dim]Get a key: {spec.key_url}[/dim]")
-            # Key is shown as you type so you can verify it's accurate.
-            api_key = Prompt.ask("API key (visible as you type)", password=False, default="")
-        if spec.models:
-            model = _pick_model(spec.models, default=spec.models[0], label="model")
-        else:
-            model = Prompt.ask("Model name", default="")
+            api_key = Prompt.ask("API key", password=True, default="")
         if not spec.local:
             base_url = Prompt.ask("Base URL (blank = provider default)", default=spec.base_url)
+        discovered = _discover_models(spec, base_url, api_key)
+        if discovered:
+            console.print(f"[green]Loaded {len(discovered)} current models from {spec.display}.[/green]")
+        else:
+            console.print("[dim]Live model discovery unavailable; showing reviewed fallbacks. "
+                          "You can type any exact model ID.[/dim]")
+        options = discovered or spec.models
+        model = _pick_model(options, default=options[0] if options else "", label="model")
 
     # 3) persona (optional system prompt)
     sys_prompt = Prompt.ask(

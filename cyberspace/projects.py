@@ -151,6 +151,23 @@ def get_prompts(project_name: str) -> list[dict]:
     return out
 
 
+def context_block(project_name: Optional[str] = None, limit: int = 8) -> str:
+    """Render recent project prompts as bounded Actions-on-Objectives memory."""
+    name = project_name or get_active()
+    if not name:
+        return ""
+    entries = get_prompts(name)[-max(1, limit):]
+    lines = [f"\n\n## Active project: {name}",
+             "Recent Actions-on-Objectives memory (cross-reference it for this request):"]
+    if not entries:
+        lines.append("No saved objectives yet.")
+    for entry in entries:
+        lines.append(f"- Objective: {entry.get('prompt', '')[:500]}")
+        if entry.get("response"):
+            lines.append(f"  Outcome: {entry['response'][:700]}")
+    return "\n".join(lines)
+
+
 def _sanitize(name: str) -> str:
     """Make a name safe for a folder: lowercase, spaces -> hyphens, strip special chars."""
     return "".join(c if c.isalnum() or c in " -_" else "" for c in name).strip().lower().replace(" ", "-")

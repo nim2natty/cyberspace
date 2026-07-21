@@ -40,39 +40,37 @@ CATALOG: list[ProviderSpec] = [
         models=["llama3.1:8b", "qwen2.5-coder:7b", "mistral-nemo:7b", "phi3:mini"],
         note="Best for the cyberdeck / Pi. Runs on your own hardware."),
     ProviderSpec(
-        "openai", "OpenAI (GPT / Codex)", "openai", base_url="https://api.openai.com/v1",
+        "openai", "OpenAI (GPT)", "openai", base_url="https://api.openai.com/v1",
         key_url="https://platform.openai.com/api-keys", env_key="OPENAI_API_KEY",
-        models=["codex", "codex-mini-latest", "gpt-5", "gpt-5-mini", "gpt-4.1",
-                "o3", "o4-mini", "gpt-4o", "gpt-4o-mini"],
-        note="GPT models + Codex (agentic coding). Strong, reliable tool-calling."),
+        models=["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
+        note="Current GPT 5.6 models with function calling; live discovery runs during setup."),
     ProviderSpec(
         "anthropic", "Anthropic (Claude)", "anthropic",
         key_url="https://console.anthropic.com/settings/keys", env_key="ANTHROPIC_API_KEY",
-        models=["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
-        note="Native Claude API - excellent reasoning."),
+        models=["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"],
+        note="Current Claude aliases with tool calling; live discovery runs during setup."),
     ProviderSpec(
         "zai", "z.ai (GLM)", "openai", base_url="https://api.z.ai/api/paas/v4",
         key_url="https://z.ai/manage-apikey/apikey-list", env_key="ZAI_API_KEY",
-        models=["glm-4.6", "glm-4.5-air", "glm-4-flash"],
-        note="Zhipu GLM models. OpenAI-compatible."),
+        models=["glm-5.2", "glm-5"],
+        note="GLM 5.2/5 with function calling. OpenAI-compatible."),
     ProviderSpec(
         "deepseek", "DeepSeek", "openai", base_url="https://api.deepseek.com",
         key_url="https://platform.deepseek.com/api_keys", env_key="DEEPSEEK_API_KEY",
-        models=["deepseek-chat", "deepseek-reasoner", "deepseek-v4-pro"],
+        models=["deepseek-chat", "deepseek-reasoner"],
         note="Great-value reasoning models. OpenAI-compatible."),
     ProviderSpec(
         "groq", "Groq (fast LPU)", "openai", base_url="https://api.groq.com/openai/v1",
         key_url="https://console.groq.com/keys", env_key="GROQ_API_KEY",
-        models=["llama-3.3-70b-versatile", "deepseek-r1-distill-llama-70b",
-                "llama-3.1-8b-instant"],
-        note="Extremely fast inference. OpenAI-compatible."),
+        models=["openai/gpt-oss-120b", "openai/gpt-oss-20b",
+                "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+        note="Extremely fast inference (gpt-oss, llama). OpenAI-compatible."),
     ProviderSpec(
         "openrouter", "OpenRouter (gateway to 100s of models)", "openai",
         base_url="https://openrouter.ai/api/v1", key_url="https://openrouter.ai/keys",
         env_key="OPENROUTER_API_KEY",
-        models=["openrouter/auto", "anthropic/claude-3.5-sonnet",
-                "google/gemini-2.0-flash-exp:free"],
-        note="One key reaches OpenAI, Claude, Gemini, Llama, and free models."),
+        models=["openrouter/auto"],
+        note="One key reaches Claude, GPT, Gemini, GLM, and free models. Format: provider/model."),
     ProviderSpec(
         "together", "Together AI", "openai", base_url="https://api.together.xyz/v1",
         key_url="https://api.together.ai/settings/api-keys", env_key="TOGETHER_API_KEY",
@@ -82,23 +80,23 @@ CATALOG: list[ProviderSpec] = [
     ProviderSpec(
         "mistral", "Mistral", "openai", base_url="https://api.mistral.ai/v1",
         key_url="https://console.mistral.ai/api-keys", env_key="MISTRAL_API_KEY",
-        models=["mistral-large-latest", "mistral-small-latest"],
-        note="OpenAI-compatible."),
+        models=["mistral-large-latest", "magistral-medium-latest", "mistral-small-latest"],
+        note="Mistral + Magistral reasoning models. OpenAI-compatible."),
     ProviderSpec(
         "xai", "xAI (Grok)", "openai", base_url="https://api.x.ai/v1",
         key_url="https://x.ai/api", env_key="XAI_API_KEY",
-        models=["grok-3", "grok-3-mini", "grok-2-latest"],
-        note="OpenAI-compatible."),
+        models=["grok-4.5", "grok-4.5-latest"],
+        note="Grok 4.5 with agentic tool calling. OpenAI-compatible."),
     ProviderSpec(
         "google", "Google (Gemini)", "openai",
         base_url="https://generativelanguage.googleapis.com/v1beta/openai",
         key_url="https://aistudio.google.com/apikey", env_key="GEMINI_API_KEY",
-        models=["gemini-2.0-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
-        note="Gemini via its OpenAI-compatible endpoint."),
+        models=["gemini-3.5-flash", "gemini-3.1-flash-lite"],
+        note="Current stable Gemini models via OpenAI-compatible endpoint."),
     ProviderSpec(
         "perplexity", "Perplexity", "openai", base_url="https://api.perplexity.ai",
         key_url="https://www.perplexity.ai/settings/api", env_key="PERPLEXITY_API_KEY",
-        models=["sonar-pro", "sonar", "llama-3.1-sonar-large-128k-online"],
+        models=["sonar-pro", "sonar", "sonar-reasoning-pro"],
         note="Models with live web access. OpenAI-compatible."),
     ProviderSpec(
         "lmstudio", "LM Studio (local)", "openai", base_url="http://localhost:1234/v1",
@@ -132,7 +130,7 @@ def all_specs() -> list[ProviderSpec]:
     return CATALOG
 
 
-def resolve_choice(choice: str) -> ProviderSpec:
+def resolve_choice(choice: str) -> ProviderSpec | None:
     """Resolve a menu choice (1-based number OR a provider key) to a spec."""
     choice = (choice or "").strip().lower()
     if choice.isdigit():
@@ -146,7 +144,7 @@ def resolve_choice(choice: str) -> ProviderSpec:
     for spec in CATALOG:
         if choice in spec.display.lower() or choice in spec.key:
             return spec
-    return CATALOG[0]
+    return None
 
 
 def served_robodaddy_models() -> list[str]:
