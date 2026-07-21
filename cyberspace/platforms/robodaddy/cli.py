@@ -27,12 +27,16 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from .datasets import recommend_datasets, register_dataset, custom_datasets
-from .gpus import GPUS, best_value_gpu, gpus_for_model
+from .gpus import (GPUS, best_value_gpu, gpus_for_model, compare_gpus,
+                   pick_best_gpu)
 from .parameters import (PARAMETER_PROFILES, PARAMETER_GUIDE, ModelParameters,
                          build_system_prompt, guide_text, load_parameters,
-                         profile as parameter_profile, save_parameters)
-from .plan import build_plan
+                         profile as parameter_profile, save_parameters,
+                         merge_overrides)
+from .plan import build_plan, _dataset_size_hint
 from .presets import BASE_MODELS, PRESETS, preset_for, resolve_use_case
+from .recommend import (recommend_parameters, enhance_parameters,
+                        heuristic_recommend)
 from .providers import PROVIDERS
 from .registry import list_keys, list_models, issue_key, revoke_key
 
@@ -142,6 +146,114 @@ def _launch_plan(console: Console, plan, *, provider: str, offer: Optional[int])
         "You may close this terminal; the worker runs independently.\n"
         "Check progress: cyberspace robodaddy dashboard",
         border_style="green"))
+
+
+def _gpu_and_launch(console, *, params, use_case, intent, provider, offer):
+    """Show a GPU time/cost table, auto-pick the best, and launch training.
+
+    Used by the guided `start` flow. Lets the user choose a GPU row, set a custom
+    training time (days), or accept the program's best pick.
+    """
+    from .gpus import compare_gpus, pick_best_gpu
+    from .presets import BASE_MODELS
+    base = params.base_model or "qwen2.5-7b"
+    if base not in BASE_MODELS:
+        base = "qwen2.5-7b"
+    b = BASE_MODELS[base]["billion"]
+    method = params.method or "qlora"
+    ds_id = params.dataset_ids[0] if params.dataset_ids else "tatsu-lab/alpaca"
+    samples = min(200000, max(5000, _dataset_size_hint(ds_id)))
+    epochs = params.epochs or 3
+    seq_len = params.max_seq_len or 2048
+    rows = compare_gpus(b, method, samples, epochs, seq_len, num_gpus=1)
+    if not rows:
+        console.print("[red]No compatible GPU for this configuration.[/red]")
+        return
+    best = pick_best_gpu(b, method, samples, epochs, seq_len, num_gpus=1)
+
+    console.print("\n[bold]Step 7:[/bold] GPUs available (training time + cost).")
+    t = Table("#", "GPU", "VRAM", "hours", "$ low", "$ mid", "$ high", "class", "")
+    for i, r in enumerate(rows, 1):
+        star = "[green]<-- best[/green]" if r["gpu"] == best else ""
+        t.add_row(str(i), r["gpu"], f"{r['vram_gb']}GB", f"{r['hours']}",
+                  f"${r['cost_low']:.2f}", f"${r['cost_mid']:.2f}",
+                  f"${r['cost_high']:.2f}", r["class"], star)
+    console.print(t)
+    console.print(f"[green]Recommended (best value):[/green] {best}")
+    console.print("[dim]Pick a row #, set a custom training time (days), or accept the best.[/dim]")
+
+    choice = Prompt.ask("Pick a GPU (row #), 'best', or custom days like 'd3'",
+                        default="best").strip().lower()
+    chosen_gpu = best
+    days = 1
+    if choice in ("best", "b", ""):
+        chosen_gpu = best
+    elif choice.startswith("d") and choice[1:].isdigit():
+        days = max(1, int(choice[1:]))
+        chosen_gpu = best
+    elif choice.isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(rows):
+            chosen_gpu = rows[idx]["gpu"]
+        else:
+            console.print("[red]Invalid row.[/red]"); return
+    else:
+        console.print("[red]Invalid choice.[/red]"); return
+
+    plan = build_plan(use_case, parameters=params, days=days, gpu=chosen_gpu,
+                      dataset_id=ds_id)
+    plan.notes.append(f"intent: {intent}")
+    _launch_plan(console, plan, provider=provider, offer=offer)
+
+
+def _run_start_remaining(console, *, params, kind, flavor, intent, latest,
+                         provider, offer):
+    """Steps 4-7 of the guided start flow (AI recommend -> prompt -> enhance -> GPU)."""
+    from .parameters import build_system_prompt
+    from .recommend import recommend_parameters, enhance_parameters
+    from .presets import BASE_MODELS, resolve_use_case
+    from ...agent.config import is_configured
+
+    # STEP 4: AI scans the config and recommends the best parameters.
+    console.print("\n[bold]Step 4:[/bold] recommending the best parameters...")
+    if is_configured():
+        console.print("[cyan]AI provider scanning your option/config...[/cyan]")
+    else:
+        console.print("[yellow]No AI provider configured - using built-in heuristics.[/yellow]\n"
+                      "[dim](configure one with `cyberspace setup` for AI-tuned params)[/dim]")
+    b = BASE_MODELS.get(params.base_model, {}).get("billion", 8)
+    params = recommend_parameters(intent, params, latest, model_size_b=b)
+    save_parameters(params)
+    _print_parameters(console, params)
+
+    # STEP 5: system prompt input (structure the AI).
+    console.print("\n[bold]Step 5:[/bold] set the system prompt that structures your AI.")
+    auto_prompt = build_system_prompt(params)
+    console.print("[dim]Auto-composed system prompt (from your focus + guardrails):[/dim]")
+    console.print(Panel(auto_prompt[:600] + ("..." if len(auto_prompt) > 600 else ""),
+                        border_style="dim"))
+    if Confirm.ask("Edit / write your own system prompt?", default=False):
+        entered = Prompt.ask("Paste your system prompt (one line; blank keeps the auto prompt)")
+        if entered.strip():
+            params.system_prompt = entered.strip()
+    else:
+        params.system_prompt = ""  # use auto-composed at build time
+
+    # STEP 6: AI pulls similar/effective params to enhance accuracy.
+    console.print("\n[bold]Step 6:[/bold] enhancing parameters from your prompt...")
+    final_prompt = params.system_prompt or auto_prompt
+    enhanced, changes = enhance_parameters(params, final_prompt)
+    params = enhanced
+    save_parameters(params)
+    for c in changes:
+        console.print(f"  [green]*[/green] {c}")
+    _print_parameters(console, params)
+
+    # STEP 7: GPU table + auto-pick / custom time.
+    uc = ("cyber_redteam" if kind == "cyber" and flavor == "redteam"
+          else "defensive_pentest" if kind == "cyber" else resolve_use_case(intent))
+    _gpu_and_launch(console, params=params, use_case=uc, intent=intent,
+                    provider=provider, offer=offer)
 
 
 def build_robodaddy_cli(console: Console) -> typer.Typer:
@@ -373,6 +485,100 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             title="training plan", border_style="cyan"))
         console.print(f"\n[dim]train it: cyberspace robodaddy train {uc} "
                       f"--base {base} --gpu {gpu} --days {days}[/dim]")
+
+    # --- guided start: refresh datasets -> intent -> AI recommend -> prompt -> GPU ----
+    @app.command("start")
+    def start(
+        skip_refresh: bool = typer.Option(False, "--skip-refresh", help="skip the latest-dataset refresh"),
+        provider: str = typer.Option("dry-run", "--provider", "-p", help="dry-run|vastai"),
+        offer: Optional[int] = typer.Option(None, "--offer"),
+    ):
+        """Guided, AI-assisted build: the recommended way to design your model."""
+        from .refresh import refresh_datasets_cache, latest_datasets, cache_info
+        from .parameters import CyberFocus
+
+        console.print(Panel.fit(
+            "[bold magenta]RoboDaddy guided start[/bold magenta]\n"
+            "Design your own open source model - step by step, AI-assisted.",
+            border_style="magenta"))
+
+        # STEP 1: refresh the latest datasets so the user can view current data.
+        console.print("\n[bold]Step 1:[/bold] refreshing the most recent Hugging Face datasets...")
+        info = cache_info()
+        if info:
+            console.print(f"[dim]last refresh: {info.get('refreshed','?')[:19]} "
+                          f"({info.get('count',0)} cached)[/dim]")
+        if not skip_refresh:
+            def on_event(stage, msg):
+                console.print(f"[dim]{stage:>8}[/dim]  {msg}")
+            cached = refresh_datasets_cache(on_event=on_event)
+            console.print(f"[green]Cached {len(cached)} of the most recent datasets.[/green] "
+                          "[dim](view anytime: cyberspace robodaddy latest)[/dim]")
+        else:
+            console.print("[dim]skipped refresh.[/dim]")
+
+        # STEP 2: state the intention with friendly options.
+        console.print("\n[bold]Step 2:[/bold] what do you want to build?")
+        kind = Prompt.ask("Choose a bot type", choices=["cyber", "custom"], default="cyber")
+        flavor = "redteam"
+        if kind == "cyber":
+            flavor = Prompt.ask("Cyber flavor", choices=["redteam", "defensive"], default="redteam")
+            params = parameter_profile("cyber_redteam" if flavor == "redteam" else "cyber_defensive")
+        else:
+            params = parameter_profile("custom_blank")
+            console.print("\n[cyan]Integrate cyber capabilities?[/cyan] (toggle each on/off)")
+            focus = params.focus
+            toggles = [
+                ("offensive_reasoning", focus.offensive_reasoning),
+                ("adversary_modeling", focus.adversary_modeling),
+                ("attack_path_reasoning", focus.attack_path_reasoning),
+                ("multi_turn_scenarios", focus.multi_turn_scenarios),
+                ("sensitive_content", focus.sensitive_content),
+                ("foothold_analysis", focus.foothold_analysis),
+                ("operator_tasks", focus.operator_tasks),
+                ("real_attack_vectors", focus.real_attack_vectors),
+            ]
+            chosen = [n for n, dv in toggles if Confirm.ask(f"  enable {n}?", default=dv)]
+            params.focus = CyberFocus(**{n: (n in chosen) for n, _ in toggles})
+        intent = Prompt.ask("Describe what your robot should do (free text)",
+                            default=("authorized red-team adversary emulation"
+                                     if kind == "cyber" else "a helpful assistant"))
+
+        # STEP 3: pick dataset(s) from the latest cache (+ live + custom).
+        console.print("\n[bold]Step 3:[/bold] pick your training data.")
+        latest = latest_datasets()
+        if latest:
+            console.print(f"[green]Latest cached datasets (showing top {min(10, len(latest))}):[/green]")
+            shown = latest[:10]
+            _print_search_results(console, shown)
+            if Confirm.ask("Use one of the latest datasets above?", default=True):
+                choices = [str(i) for i in range(1, len(shown) + 1)]
+                idx = int(Prompt.ask("Dataset #", choices=choices, default="1")) - 1
+                params.dataset_ids = [shown[idx]["id"]]
+            else:
+                params.dataset_ids = [Prompt.ask("Enter any HF dataset repo id (owner/name)",
+                                                 default="trendmicro-ailab/Primus-Instruct")]
+        else:
+            params.dataset_ids = [Prompt.ask("Enter any HF dataset repo id (owner/name)",
+                                             default="trendmicro-ailab/Primus-Instruct")]
+
+        _run_start_remaining(console, params=params, kind=kind, flavor=flavor,
+                              intent=intent, latest=latest, provider=provider, offer=offer)
+
+    @app.command("latest")
+    def latest_cmd(limit: int = typer.Option(15, "--limit")):
+        """View the most recent Hugging Face datasets cached by the last refresh."""
+        from .refresh import latest_datasets, cache_info, refresh_datasets_cache
+        info = cache_info()
+        datasets = latest_datasets(limit=limit)
+        if not datasets and Confirm.ask("No cached datasets yet. Refresh now?", default=True):
+            datasets = refresh_datasets_cache()
+        if datasets:
+            console.print(f"[green]Latest datasets[/green] "
+                          f"[dim](refreshed {info.get('refreshed','?')[:19]})[/dim]")
+            _print_search_results(console, datasets[:limit])
+        else:
+            console.print("[dim]still none - check your network and try again.[/dim]")
 
     # --- design your own model (parameters + cyber/custom bots) ------------
     @app.command("parameters")

@@ -19,6 +19,10 @@ model scoped for authorized use, so the same reasoning supports autonomous
 red-team operations and deep defensive workflows with accuracy.
 
   datasets   browse public training-data recommendations + register any HF dataset
+  latest     view the most recent Hugging Face datasets cached by the last refresh
+  start      guided, AI-assisted build (refresh latest data -> cyber/custom ->
+             AI-recommended parameters -> your system prompt -> AI enhancement ->
+             GPU time/cost table with an auto best-pick) -- the recommended entry point
   parameters view/set/reset the full model-design parameters (hyperparameters,
              cyber focus, guardrails) and get a built-in guide
   cyber      build a cyber bot (red-team/adversary emulation or defense)

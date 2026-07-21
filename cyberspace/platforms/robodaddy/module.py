@@ -268,6 +268,49 @@ def _tool_custom(use_case: str = "general", dataset: str = "", base: str = "",
             f"base={plan.base_model} dataset={plan.dataset_id} epochs={plan.epochs}.")
 
 
+def _tool_refresh():
+    """Agent-callable: refresh the most recent Hugging Face datasets into the cache."""
+    from .refresh import refresh_datasets_cache, cache_info
+    cached = refresh_datasets_cache()
+    info = cache_info()
+    return (f"refreshed {len(cached)} most recent datasets (cached {info.get('count', 0)}). "
+            "View with robodaddy.latest.")
+
+
+def _tool_latest(limit: int = 10):
+    """Agent-callable: list the most recent cached Hugging Face datasets."""
+    from .refresh import latest_datasets
+    rows = latest_datasets(limit=limit or 10)
+    if not rows:
+        return ("no cached datasets yet. Run robodaddy.refresh to fetch the latest "
+                "Hugging Face datasets.")
+    return "\n".join(f"- {d['id']}: modified={d.get('last_modified','')} "
+                     f"{d.get('license','?')}/{d.get('access','?')}; {d.get('note','')}"
+                     for d in rows)
+
+
+def _tool_recommend(intent: str = "", kind: str = "cyber", dataset: str = ""):
+    """Agent-callable: AI-recommend the best parameters for an intent.
+
+    Scans the option/config and returns recommended hyperparameters (with a
+    deterministic fallback when no provider is configured).
+    """
+    from .parameters import profile as load_profile
+    from .recommend import recommend_parameters
+    from .refresh import latest_datasets
+    prof_name = "cyber_redteam" if kind == "cyber" else "custom_blank"
+    params = load_profile(prof_name)
+    if dataset:
+        params.dataset_ids = [dataset]
+    latest = latest_datasets()
+    rec = recommend_parameters(intent or "cyber red team", params, latest)
+    return (f"recommended params ({rec.label}): base={rec.base_model or 'preset'} "
+            f"method={rec.method} epochs={rec.epochs} lr={rec.learning_rate} "
+            f"batch={rec.batch_size} seq_len={rec.max_seq_len} lora_r={rec.lora_r} "
+            f"grad_accum={rec.gradient_accumulation_steps} optim={rec.optimizer} "
+            f"sched={rec.lr_scheduler}. datasets={rec.dataset_ids}.")
+
+
 class RoboDaddyModule(Module):
     def describe(self) -> ModuleInfo:
         return ModuleInfo(
@@ -393,6 +436,28 @@ class RoboDaddyModule(Module):
                                        "lora_r": {"type": "integer", "default": 16},
                                        "days": {"type": "integer", "default": 1}},
                         "required": []}, fn=_tool_custom))
+        registry.register(Tool(
+            name="robodaddy.refresh",
+            description="Refresh the most recent Hugging Face datasets into the local cache "
+                        "so the user can view the latest data.",
+            parameters={"type": "object", "properties": {}}, fn=_tool_refresh))
+        registry.register(Tool(
+            name="robodaddy.latest",
+            description="List the most recent Hugging Face datasets from the local cache.",
+            parameters={"type": "object",
+                        "properties": {"limit": {"type": "integer", "default": 10}}},
+            fn=_tool_latest))
+        registry.register(Tool(
+            name="robodaddy.recommend",
+            description="AI-recommend the best parameters (hyperparameters, accumulation, "
+                        "scheduler, optimizer, ...) for an intent. Scans the option/config "
+                        "so the user does not have to read a guide. kind = cyber | custom.",
+            parameters={"type": "object",
+                        "properties": {"intent": {"type": "string", "default": ""},
+                                       "kind": {"type": "string", "default": "cyber",
+                                                 "enum": ["cyber", "custom"]},
+                                       "dataset": {"type": "string", "default": ""}},
+                        "required": ["intent"]}, fn=_tool_recommend))
 
     def build_cli(self) -> typer.Typer:
         from .cli import build_robodaddy_cli

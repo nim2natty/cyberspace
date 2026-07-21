@@ -494,6 +494,20 @@ Nothing about RoboDaddy artificially limits capability. You can build a **cyber 
 > respect each dataset's terms.
 
 ```bash
+# RECOMMENDED: the guided, AI-assisted build (one command does the whole flow)
+cyberspace robodaddy start
+#   1. refreshes the most recent Hugging Face datasets (cached for later viewing)
+#   2. asks cyber vs custom (custom can still toggle cyber capabilities on)
+#   3. the AI provider scans your config and recommends the best parameters
+#      (hyperparameters, accumulation, scheduler, optimizer, ...) - no guide needed
+#   4. lets you input/edit the system prompt that structures the AI
+#   5. uses the AI to pull similar/effective parameters and enhance accuracy
+#   6. shows a GPU time/cost table, auto-picks the best, and lets you pick a row
+#      or set a custom training time
+
+# View the latest cached datasets anytime
+cyberspace robodaddy latest
+
 # STEP 0: See the full set of parameters you can set (with a built-in guide)
 cyberspace robodaddy parameters guide
 cyberspace robodaddy parameters profiles        # cyber_redteam | cyber_defensive | custom_blank

@@ -55,3 +55,38 @@ def best_value_gpu(model_billion_params: int, method: str = "qlora") -> str:
     if not candidates:
         return ""
     return min(candidates, key=lambda g: GPUS[g]["dph_low"])
+
+
+def compare_gpus(model_billion_params: int, method: str, samples: int, epochs: int,
+                 seq_len: int, num_gpus: int = 1) -> list[dict]:
+    """Return a GPU comparison for a planned run: time + cost for every compatible GPU.
+
+    Each row: {gpu, vram_gb, hours, cost_low, cost_mid, cost_high, dph_low, capable}.
+    Used by the guided flow to show a time/cost table and auto-pick the best one.
+    """
+    # Local import to avoid a circular dependency (plan imports gpus).
+    from .plan import _hours_for, estimate_cost
+    rows = []
+    for gid, spec in GPUS.items():
+        cap = "qlora_max_b" if method == "qlora" else "full_ft_max_b"
+        capable = spec[cap] >= model_billion_params
+        if not capable:
+            continue
+        hours = _hours_for(model_billion_params, samples, epochs, seq_len, gid, num_gpus)
+        low, mid, high = estimate_cost(gid, hours)
+        rows.append({
+            "gpu": gid, "vram_gb": spec["vram_gb"], "capable": capable,
+            "hours": round(hours, 2), "cost_low": round(low, 2),
+            "cost_mid": round(mid, 2), "cost_high": round(high, 2),
+            "dph_low": spec["dph_low"], "class": spec["class"],
+        })
+    # Cheapest total cost first.
+    rows.sort(key=lambda r: r["cost_mid"])
+    return rows
+
+
+def pick_best_gpu(model_billion_params: int, method: str, samples: int, epochs: int,
+                  seq_len: int, num_gpus: int = 1) -> str:
+    """Pick the best-value compatible GPU for a run (cheapest projected total)."""
+    rows = compare_gpus(model_billion_params, method, samples, epochs, seq_len, num_gpus)
+    return rows[0]["gpu"] if rows else ""
