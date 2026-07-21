@@ -31,6 +31,12 @@ class TrainingPlan:
     lora_r: int = 16
     days: int = 1                       # user-chosen budget
     samples: int = 50000                # approx rows trained per epoch
+    # User-designed parameters (see .parameters). system_prompt attunes training;
+    # focus/guardrails describe how the model should behave once served.
+    system_prompt: str = ""
+    focus: dict = field(default_factory=dict)
+    guardrails: dict = field(default_factory=dict)
+    extra_hyperparams: dict = field(default_factory=dict)
     # derived (filled by estimate()):
     hours: float = 0.0
     cost_low: float = 0.0
@@ -60,27 +66,100 @@ def _hours_for(model_b: int, samples: int, epochs: int, seq_len: int,
 def build_plan(use_case: str, *, base_model: Optional[str] = None,
                dataset_id: Optional[str] = None, gpu: Optional[str] = None,
                dataset_revision: str = "main", days: int = 1,
-               num_gpus: int = 1, epochs: int = 3) -> TrainingPlan:
-    """Construct a plan from a use case + overrides, with cost/time estimates."""
+               num_gpus: int = 1, epochs: int = 3,
+               parameters: Optional["ModelParameters"] = None) -> TrainingPlan:
+    """Construct a plan from a use case + overrides, with cost/time estimates.
+
+    When ``parameters`` (a robodaddy.parameters.ModelParameters) is supplied, the
+    user's designed parameters are overlaid: hyperparameters, training method, and
+    a system prompt composed from the cyber focus + guardrails. This is how the
+    training process gets attuned to the model the user designed.
+    """
     use_case = resolve_use_case(use_case)
     preset = preset_for(use_case)
-    base = base_model or preset["base"]
+
+    # If the user designed parameters, those take priority (base model, dataset,
+    # method, hyperparameters, and the composed system prompt).
+    method = preset["method"]
+    chosen_system_prompt = ""
+    focus_dict: dict = {}
+    guardrails_dict: dict = {}
+    extra_hp: dict = {}
+    if parameters is not None:
+        from .parameters import build_system_prompt
+        if parameters.base_model and parameters.base_model in BASE_MODELS:
+            base = parameters.base_model
+        else:
+            base = base_model or preset["base"]
+        if parameters.method in ("qlora", "lora", "full"):
+            method = parameters.method
+        if parameters.dataset_ids:
+            ds = parameters.dataset_ids[0]
+        elif dataset_id:
+            ds = dataset_id
+        else:
+            ds = datasets_for(preset["datasets"])[0]["id"]
+        chosen_system_prompt = build_system_prompt(parameters, preset_prompt=preset.get("system_prompt", ""))
+        focus_dict = parameters.focus.to_dict()
+        guardrails_dict = parameters.guardrails.to_dict()
+        extra_hp = {
+            k: v for k, v in {
+                "lora_alpha": parameters.lora_alpha,
+                "lora_dropout": parameters.lora_dropout,
+                "weight_decay": parameters.weight_decay,
+                "warmup_ratio": parameters.warmup_ratio,
+                "gradient_accumulation_steps": parameters.gradient_accumulation_steps,
+                "lr_scheduler": parameters.lr_scheduler,
+                "optimizer": parameters.optimizer,
+                "seed": parameters.seed,
+                "packing": parameters.packing,
+            }.items() if v is not None
+        }
+        if parameters.epochs is not None:
+            epochs = parameters.epochs
+        if parameters.learning_rate is not None:
+            pass  # applied below via plan field
+        if parameters.batch_size is not None:
+            pass  # applied below via plan field
+        if parameters.max_seq_len is not None:
+            pass  # applied below via plan field
+        if parameters.lora_r is not None:
+            pass  # applied below via plan field
+    else:
+        base = base_model or preset["base"]
+        ds = dataset_id or datasets_for(preset["datasets"])[0]["id"]
+
     if base not in BASE_MODELS:
         base = preset["base"]
     bparams = BASE_MODELS[base]["billion"]
 
-    ds_list = datasets_for(preset["datasets"])
-    ds = dataset_id or ds_list[0]["id"]
-
-    chosen_gpu = gpu or best_value_gpu(bparams, preset["method"])
+    chosen_gpu = gpu or best_value_gpu(bparams, method)
     if chosen_gpu not in GPUS:                          # fall back if unsupported
-        chosen_gpu = best_value_gpu(bparams, preset["method"]) or "A100_40"
+        chosen_gpu = best_value_gpu(bparams, method) or "A100_40"
+
+    # Apply user hyperparameter overrides (no artificial limits).
+    learning_rate = 2e-4
+    batch_size = 4
+    max_seq_len = 2048
+    lora_r = 16
+    if parameters is not None:
+        if parameters.learning_rate is not None:
+            learning_rate = parameters.learning_rate
+        if parameters.batch_size is not None:
+            batch_size = parameters.batch_size
+        if parameters.max_seq_len is not None:
+            max_seq_len = parameters.max_seq_len
+        if parameters.lora_r is not None:
+            lora_r = parameters.lora_r
 
     samples = min(200000, max(5000, _dataset_size_hint(ds)))
-    # Scale epochs up with the user's day budget (more days => more passes).
-    epochs = max(1, epochs + (days - 1))
+    # Scale epochs up with the user's day budget (more days => more passes),
+    # unless the user explicitly pinned epochs via parameters (then keep them).
+    if not (parameters is not None and parameters.epochs is not None):
+        epochs = max(1, epochs + (days - 1))
+    epochs = max(1, epochs)
 
-    hours = _hours_for(bparams, samples, epochs, 2048, chosen_gpu, num_gpus)
+    hours = _hours_for(bparams, samples, epochs, max_seq_len, chosen_gpu, num_gpus)
     low, mid, high = estimate_cost(chosen_gpu, hours)
 
     notes = []
@@ -94,20 +173,29 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
         )
         if dataset_meta.get("access") != "public":
             notes.append("dataset requires accepting Hugging Face terms and setting HF_TOKEN before a real run.")
-    notes.append(f"{preset['method']} on {num_gpus}x {chosen_gpu} ({GPUS[chosen_gpu]['vram_gb']}GB VRAM)")
-    if GPUS[chosen_gpu]["qlora_max_b"] < bparams and preset["method"] == "qlora":
+    notes.append(f"{method} on {num_gpus}x {chosen_gpu} ({GPUS[chosen_gpu]['vram_gb']}GB VRAM)")
+    if GPUS[chosen_gpu]["qlora_max_b"] < bparams and method == "qlora":
         notes.append(f"WARNING: {chosen_gpu} VRAM may be tight for {bparams}B QLoRA - "
                      f"consider {best_value_gpu(bparams,'qlora')}.")
     if days >= 3:
         notes.append("long run - watch for preempted spot instances; checkpoint often.")
+    if chosen_system_prompt:
+        notes.append(f"attuned system prompt ({len(chosen_system_prompt)} chars) "
+                     "composed from cyber focus + user guardrails.")
+        if focus_dict and focus_dict.get("sensitive_content"):
+            notes.append("sensitive-content handling enabled within the user's guardrails.")
 
     return TrainingPlan(
         name=f"{_safe_name(base)}-{_safe_name(use_case)}-d{days}",
         use_case=use_case, base_model=base,
         dataset_id=ds, dataset_revision=dataset_revision or "main",
-        method=preset["method"], gpu=chosen_gpu, num_gpus=num_gpus,
-        epochs=epochs, days=days, samples=samples, hours=hours,
+        method=method, gpu=chosen_gpu, num_gpus=num_gpus,
+        epochs=epochs, learning_rate=learning_rate, batch_size=batch_size,
+        max_seq_len=max_seq_len, lora_r=lora_r,
+        days=days, samples=samples, hours=hours,
         cost_low=low, cost_mid=mid, cost_high=high, notes=notes,
+        system_prompt=chosen_system_prompt, focus=focus_dict,
+        guardrails=guardrails_dict, extra_hyperparams=extra_hp,
     )
 
 

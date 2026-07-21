@@ -32,6 +32,18 @@ PRESETS = {
         "system_prompt": "You are a senior offensive security operator. Help plan "
                          "authorized assessments using available tools.",
     },
+    "cyber_redteam": {
+        "label": "Cyber Bot - Red Team / Adversary Emulation",
+        "prompt_examples": ["cyber bot", "cyber", "red team bot", "adversary emulation",
+                            "attack path", "offensive reasoning", "autonomous red team",
+                            "operator assistant", "foothold analysis", "adversary modeling"],
+        "base": "llama3.1-8b", "method": "qlora",
+        "datasets": "offensive_pentest",
+        "system_prompt": "You are a senior red-team / adversary-emulation operator. You reason "
+                         "through full attack paths - analyze footholds, explore exploitability, "
+                         "chain findings, and model realistic adversaries - for authorized "
+                         "assessments, framed for both offense and defense.",
+    },
     "defensive_pentest": {
         "label": "Defensive / Blue Team Security",
         "prompt_examples": ["defensive pen security", "blue team", "soc analyst",

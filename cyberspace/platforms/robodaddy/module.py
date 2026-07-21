@@ -161,12 +161,122 @@ def _tool_keys(action: str = "list", model_name: str = "", prefix: str = ""):
     return "action must be list, new, or revoke"
 
 
+def _coerce_known_agent(current, value: str):
+    if isinstance(current, bool):
+        return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+    if isinstance(current, int):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return value
+    if isinstance(current, float):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return value
+    return value
+
+
+def _coerce_for_agent(params, key: str, value: str):
+    if "." in key:
+        section, field_name = key.split(".", 1)
+        container = getattr(params, section, None)
+        if container is not None and field_name in container.__dict__:
+            return _coerce_known_agent(getattr(container, field_name), value)
+        return value
+    if hasattr(params, key):
+        return _coerce_known_agent(getattr(params, key), value)
+    return value
+
+
+def _tool_parameters(action: str = "show", key: str = "", value: str = "", profile: str = ""):
+    """Agent-callable: view/set the full model-design parameter set."""
+    from .parameters import (guide_text, PARAMETER_PROFILES, profile as load_profile,
+                             load_parameters, save_parameters, merge_overrides, build_system_prompt)
+    if action == "guide":
+        return guide_text()
+    if action == "profiles":
+        return "\n".join(f"- {name}: {mp.label}" for name, mp in PARAMETER_PROFILES.items())
+    if action == "set":
+        current = load_profile(profile) if profile else (load_parameters() or load_profile("custom_blank"))
+        if key:
+            current = merge_overrides(current, **{key: _coerce_for_agent(current, key, value)})
+        save_parameters(current)
+        return (f"saved parameter profile ({current.label}). base={current.base_model or 'preset'} "
+                f"method={current.method or 'preset'} epochs={current.epochs} datasets={current.dataset_ids}")
+    current = load_parameters()
+    if current is None:
+        return ("no saved parameter profile. Start with: "
+                "robodaddy.parameters action=set profile=cyber_redteam")
+    return (f"profile: {current.label}\nbase_model={current.base_model} method={current.method}\n"
+            f"focus={current.focus.to_dict()}\nguardrails={current.guardrails.to_dict()}\n"
+            f"composed system prompt:\n{build_system_prompt(current)}")
+
+
+def _tool_cyber(flavor: str = "redteam", use_case: str = "", dataset: str = "",
+                days: int = 1, base: str = "", scope: str = "", guardrail_level: str = ""):
+    """Agent-callable: build a cyber bot (red-team/adversary emulation or defense)."""
+    from .parameters import profile as load_profile, merge_overrides, save_parameters
+    from .plan import build_plan
+    from .jobs import launch_background
+    prof_name = "cyber_redteam" if str(flavor).startswith("red") else "cyber_defensive"
+    params = load_profile(prof_name)
+    overrides = {}
+    if scope:
+        overrides["guardrails.authorization_scope"] = scope
+    if guardrail_level:
+        overrides["guardrails.guardrail_level"] = guardrail_level
+    if base:
+        overrides["base_model"] = base
+    if dataset:
+        overrides["dataset_ids"] = [dataset]
+    if overrides:
+        params = merge_overrides(params, **overrides)
+    save_parameters(params)
+    uc = "cyber_redteam" if prof_name == "cyber_redteam" else "defensive_pentest"
+    plan = build_plan(use_case or uc, parameters=params, days=days,
+                      dataset_id=(params.dataset_ids[0] if params.dataset_ids else None))
+    model = launch_background(plan, dry_run=True)
+    return (f"cyber bot plan launched (dry-run): {model.name} status={model.status}. "
+            f"base={plan.base_model} dataset={plan.dataset_id} "
+            f"guardrail_level={params.guardrails.guardrail_level} "
+            f"scope='{params.guardrails.authorization_scope}'.")
+
+
+def _tool_custom(use_case: str = "general", dataset: str = "", base: str = "",
+                 epochs=3, learning_rate=2e-4, batch_size=4, max_seq_len=2048,
+                 lora_r=16, days: int = 1):
+    """Agent-callable: build a fully custom bot with user-defined parameters."""
+    from .parameters import profile as load_profile, save_parameters
+    from .plan import build_plan
+    from .jobs import launch_background
+    params = load_profile("custom_blank")
+    if base:
+        params.base_model = base
+    params.epochs = int(epochs)
+    params.learning_rate = float(learning_rate)
+    params.batch_size = int(batch_size)
+    params.max_seq_len = int(max_seq_len)
+    params.lora_r = int(lora_r)
+    if dataset:
+        params.dataset_ids = [dataset]
+    save_parameters(params)
+    plan = build_plan(use_case, parameters=params, days=days,
+                      dataset_id=(params.dataset_ids[0] if params.dataset_ids else None))
+    model = launch_background(plan, dry_run=True)
+    return (f"custom bot plan launched (dry-run): {model.name} status={model.status}. "
+            f"base={plan.base_model} dataset={plan.dataset_id} epochs={plan.epochs}.")
+
+
 class RoboDaddyModule(Module):
     def describe(self) -> ModuleInfo:
         return ModuleInfo(
             name="robodaddy", display_name="RoboDaddy", version="0.1.0",
             emoji="\U0001F916",  # robot
-            description="Guided live data discovery, GPU pricing, background training, serving, and keys.",
+            description="Design and train your own open source model. Browse and pick any "
+                        "Hugging Face dataset, set fully custom parameters (or use a cyber "
+                        "red-team / adversary-emulation profile), set your own guardrails "
+                        "before use, dispatch background QLoRA training, then serve it.",
             requires_tools=[],   # no host tools needed (everything is Python + remote APIs)
         )
 
@@ -235,6 +345,54 @@ class RoboDaddyModule(Module):
                                        "model_name": {"type": "string", "default": ""},
                                        "prefix": {"type": "string", "default": ""}},
                         "required": ["action"]}, fn=_tool_keys))
+        registry.register(Tool(
+            name="robodaddy.parameters",
+            description="View, set, or list the full model-design parameter set: training "
+                        "hyperparameters, cyber capability focus, and the guardrails applied "
+                        "before use. Nothing is limited - the user designs it. action = "
+                        "show | guide | profiles | set (pass key/value, optional profile).",
+            parameters={"type": "object",
+                        "properties": {"action": {"type": "string", "default": "show",
+                                                   "enum": ["show", "guide", "profiles", "set"]},
+                                       "key": {"type": "string", "default": "",
+                                               "description": "e.g. epochs or guardrails.guardrail_level"},
+                                       "value": {"type": "string", "default": ""},
+                                       "profile": {"type": "string", "default": "",
+                                                   "description": "cyber_redteam | cyber_defensive | custom_blank"}},
+                        "required": ["action"]}, fn=_tool_parameters))
+        registry.register(Tool(
+            name="robodaddy.cyber",
+            description="Build a CYBER BOT for authorized red-team / adversary emulation or "
+                        "defense. Attunes training to full offensive reasoning, adversary "
+                        "modeling, and attack-path reasoning (footholds, exploitability, "
+                        "finding chaining, full attack paths) using operator-inspired "
+                        "multi-turn scenarios, with user-set guardrails. Launches a dry-run.",
+            parameters={"type": "object",
+                        "properties": {"flavor": {"type": "string", "default": "redteam",
+                                                   "enum": ["redteam", "defensive"]},
+                                       "use_case": {"type": "string", "default": ""},
+                                       "dataset": {"type": "string", "default": ""},
+                                       "scope": {"type": "string", "default": "",
+                                                  "description": "authorized scope"},
+                                       "guardrail_level": {"type": "string", "default": ""},
+                                       "base": {"type": "string", "default": ""},
+                                       "days": {"type": "integer", "default": 1}},
+                        "required": ["flavor"]}, fn=_tool_cyber))
+        registry.register(Tool(
+            name="robodaddy.custom",
+            description="Build a CUSTOM BOT with fully user-defined parameters and any "
+                        "Hugging Face dataset - no limits. Launches a dry-run plan.",
+            parameters={"type": "object",
+                        "properties": {"use_case": {"type": "string", "default": "general"},
+                                       "dataset": {"type": "string", "default": ""},
+                                       "base": {"type": "string", "default": ""},
+                                       "epochs": {"type": "integer", "default": 3},
+                                       "learning_rate": {"type": "number", "default": 0.0002},
+                                       "batch_size": {"type": "integer", "default": 4},
+                                       "max_seq_len": {"type": "integer", "default": 2048},
+                                       "lora_r": {"type": "integer", "default": 16},
+                                       "days": {"type": "integer", "default": 1}},
+                        "required": []}, fn=_tool_custom))
 
     def build_cli(self) -> typer.Typer:
         from .cli import build_robodaddy_cli

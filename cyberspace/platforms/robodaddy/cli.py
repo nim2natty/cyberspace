@@ -26,8 +26,11 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from .datasets import recommend_datasets
+from .datasets import recommend_datasets, register_dataset, custom_datasets
 from .gpus import GPUS, best_value_gpu, gpus_for_model
+from .parameters import (PARAMETER_PROFILES, PARAMETER_GUIDE, ModelParameters,
+                         build_system_prompt, guide_text, load_parameters,
+                         profile as parameter_profile, save_parameters)
 from .plan import build_plan
 from .presets import BASE_MODELS, PRESETS, preset_for, resolve_use_case
 from .providers import PROVIDERS
@@ -58,6 +61,87 @@ def _print_search_results(console: Console, results: list[dict]) -> None:
     for i, d in enumerate(results):
         console.print(f"  [{i + 1}] {d['id']} - {d['note']} "
                       f"[dim](use case: {d.get('use_case_label', d.get('use_case', '-'))})[/dim]")
+
+
+def _print_parameters(console: Console, params) -> None:
+    """Pretty-print a ModelParameters profile so the user can see what's set."""
+    console.print(f"[bold]{params.label}[/bold]")
+    console.print(f"base_model: {params.base_model or '(preset default)'}   method: {params.method or '(preset default)'}")
+    hp = {k: getattr(params, k) for k in ("epochs", "learning_rate", "batch_size",
+           "max_seq_len", "lora_r", "weight_decay", "warmup_ratio",
+           "gradient_accumulation_steps", "lr_scheduler", "optimizer", "seed")}
+    hp = {k: v for k, v in hp.items() if v is not None}
+    console.print(f"hyperparameters: {hp}")
+    if params.dataset_ids:
+        console.print(f"datasets: {', '.join(params.dataset_ids)}")
+    f = params.focus
+    enabled = [k for k in ("offensive_reasoning", "adversary_modeling", "attack_path_reasoning",
+                "multi_turn_scenarios", "sensitive_content", "foothold_analysis",
+                "operator_tasks", "real_attack_vectors") if getattr(f, k)]
+    console.print(f"focus: {', '.join(enabled) or '(none)'}")
+    g = params.guardrails
+    console.print(f"guardrails: level={g.guardrail_level}  "
+                  f"scope={g.authorization_scope}  authorized={g.authorization_confirmed}")
+    if g.allowed_categories:
+        console.print(f"  allowed: {', '.join(g.allowed_categories)}")
+    if g.denied_categories:
+        console.print(f"  denied: {', '.join(g.denied_categories)}")
+    if params.system_prompt:
+        console.print(f"system prompt override: {len(params.system_prompt)} chars")
+
+
+def _coerce_value(params, key: str, value: str):
+    """Coerce a CLI string value to the right type for a parameter key."""
+    if not value:
+        return value
+    if "." in key:
+        section, field_name = key.split(".", 1)
+        container = getattr(params, section, None)
+        if container is not None and field_name in container.__dict__:
+            return _coerce_known(getattr(container, field_name), value)
+        return value
+    if hasattr(params, key):
+        return _coerce_known(getattr(params, key), value)
+    return value
+
+
+def _coerce_known(current, value: str):
+    if isinstance(current, bool):
+        return value.strip().lower() in ("1", "true", "yes", "y", "on")
+    if isinstance(current, int):
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    if isinstance(current, float):
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _launch_plan(console: Console, plan, *, provider: str, offer: Optional[int]) -> None:
+    """Show a plan summary and launch a background training job (dry-run default)."""
+    console.print(Panel.fit(
+        f"[bold]{plan.name}[/bold]\n"
+        f"base: {plan.base_model}   dataset: {plan.dataset_id}\n"
+        f"method: {plan.method} on {plan.num_gpus}x {plan.gpu}   epochs: {plan.epochs}\n"
+        f"est. time: {plan.hours}h   est. cost: ${plan.cost_low:.2f}-${plan.cost_high:.2f}\n"
+        + ("\n".join("  " + n for n in plan.notes)),
+        title="RoboDaddy plan", border_style="cyan"))
+    question = ("Rent the GPU and launch paid training?" if provider == "vastai"
+                else "Launch this training dry-run?")
+    if not Confirm.ask(question, default=False):
+        console.print("[dim]Plan reviewed; nothing was launched.[/dim]")
+        return
+    from .jobs import launch_background
+    model = launch_background(plan, dry_run=(provider == "dry-run"), vast_offer_id=offer)
+    console.print(Panel.fit(
+        f"[green]launched in background:[/green] {model.name}\nstatus: {model.status}\n"
+        "You may close this terminal; the worker runs independently.\n"
+        "Check progress: cyberspace robodaddy dashboard",
+        border_style="green"))
 
 
 def build_robodaddy_cli(console: Console) -> typer.Typer:
@@ -289,6 +373,167 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             title="training plan", border_style="cyan"))
         console.print(f"\n[dim]train it: cyberspace robodaddy train {uc} "
                       f"--base {base} --gpu {gpu} --days {days}[/dim]")
+
+    # --- design your own model (parameters + cyber/custom bots) ------------
+    @app.command("parameters")
+    def parameters(
+        action: str = typer.Argument("show", help="show | guide | profiles | set | reset"),
+        key: str = typer.Option("", "--key", "-k", help="parameter name, e.g. epochs or guardrails.guardrail_level"),
+        value: str = typer.Option("", "--value", "-v", help="value for the parameter (set action)"),
+        profile_name: str = typer.Option("", "--profile", help="start from cyber_redteam | cyber_defensive | custom_blank"),
+    ):
+        """View, set, or reset the full set of model-design parameters.
+
+        RoboDaddy does not limit what you can configure: training hyperparameters,
+        the cyber capability focus, and the guardrails applied before use are all
+        yours to set. `parameters guide` for help, `parameters set` to change any
+        value, and the chosen values attune every training run.
+        """
+        if action == "guide":
+            console.print(guide_text()); return
+        if action == "profiles":
+            for name, mp in PARAMETER_PROFILES.items():
+                console.print(f"  [bold]{name}[/bold] - {mp.label}")
+            console.print("\n[dim]cyberspace robodaddy parameters set --profile <name>[/dim]")
+            return
+        if action == "reset":
+            from .parameters import PARAMS_FILE
+            try:
+                PARAMS_FILE.unlink()
+            except OSError:
+                pass
+            console.print("[green]parameter profile cleared. Defaults/presets will be used.[/green]")
+            return
+        if action == "set":
+            current = parameter_profile(profile_name) if profile_name else (load_parameters() or parameter_profile("custom_blank"))
+            if key:
+                coerced = _coerce_value(current, key, value)
+                from .parameters import merge_overrides
+                current = merge_overrides(current, **{key: coerced})
+            path = save_parameters(current)
+            console.print(f"[green]saved parameter profile:[/green] {path}")
+            _print_parameters(console, current)
+            return
+        current = load_parameters()
+        if current is None:
+            console.print("[dim]no saved parameter profile yet. Defaults are used.[/dim]")
+            console.print("[dim]Start: cyberspace robodaddy parameters set --profile cyber_redteam[/dim]")
+            console.print("[dim]Help:  cyberspace robodaddy parameters guide[/dim]")
+            return
+        _print_parameters(console, current)
+
+    @app.command("cyber")
+    def cyber(
+        flavor: str = typer.Argument("redteam", help="redteam | defensive"),
+        use_case: str = typer.Option("", "--use-case", "-u", help="extra intent text"),
+        dataset: str = typer.Option("", "--dataset", "-d", help="Hugging Face dataset repo id to train on"),
+        days: int = typer.Option(1, "--days"),
+        provider: str = typer.Option("dry-run", "--provider", "-p", help="dry-run|vastai"),
+        offer: Optional[int] = typer.Option(None, "--offer"),
+        interactive: bool = typer.Option(True, "--interactive/--no-interactive"),
+    ):
+        """Build a CYBER BOT for red-team / adversary emulation or defense.
+
+        Attunes training to full offensive reasoning, realistic adversary
+        modeling, and attack-path reasoning (analyze footholds, explore
+        exploitability, chain findings, reason through full attack paths) using
+        operator-inspired, multi-turn scenarios - while YOU set the guardrails
+        applied before the model is used. Produces your own open source model.
+        """
+        prof_name = "cyber_redteam" if flavor.startswith("red") else "cyber_defensive"
+        params = parameter_profile(prof_name)
+        console.print(Panel.fit(
+            f"[bold]{params.label}[/bold]\n"
+            "Full attack-path reasoning, adversary modeling, and operator-inspired "
+            "multi-turn scenarios - for authorized use, with guardrails you set.",
+            title="RoboDaddy Cyber Bot", border_style="magenta"))
+        if interactive:
+            scope = Prompt.ask("Authorized scope this model may operate in",
+                               default=params.guardrails.authorization_scope)
+            level = Prompt.ask("Guardrail level",
+                               choices=["authorized-lab", "red-team-engagement",
+                                        "research-only", "unrestricted-with-disclosure"],
+                               default=params.guardrails.guardrail_level)
+            authorized = Confirm.ask("Confirm you are authorized to operate within this "
+                                     "scope (written permission / owned lab / engagement)?",
+                                     default=False)
+            from .parameters import merge_overrides
+            params = merge_overrides(params, **{
+                "guardrails.authorization_scope": scope,
+                "guardrails.guardrail_level": level,
+                "guardrails.authorization_confirmed": authorized,
+            })
+            if dataset:
+                params.dataset_ids = [dataset]
+            elif not params.dataset_ids:
+                intent = use_case or "cyber red team adversary emulation datasets"
+                console.print(f"\n[cyan]Searching live Hugging Face datasets for:[/cyan] {intent}")
+                from .discovery import discover_datasets, rank_datasets
+                candidates = discover_datasets(intent, limit=15)
+                ranked = rank_datasets(intent, candidates, limit=8) if candidates else []
+                if ranked:
+                    _print_search_results(console, ranked)
+                    choices = [str(i) for i in range(1, len(ranked) + 1)]
+                    sel = ranked[int(Prompt.ask("Dataset #", choices=choices, default="1")) - 1]
+                    params.dataset_ids = [sel["id"]]
+                else:
+                    custom_ds = Prompt.ask("Enter any Hugging Face dataset repo id (owner/name)",
+                                           default="trendmicro-ailab/Primus-Instruct")
+                    params.dataset_ids = [custom_ds]
+            if Confirm.ask("Tune hyperparameters (epochs, lr, seq_len, lora_r)?", default=False):
+                params.epochs = int(Prompt.ask("epochs", default=str(params.epochs or 4)))
+                params.learning_rate = float(Prompt.ask("learning_rate", default=str(params.learning_rate or 2e-4)))
+                params.max_seq_len = int(Prompt.ask("max_seq_len", default=str(params.max_seq_len or 4096)))
+                params.lora_r = int(Prompt.ask("lora_r", default=str(params.lora_r or 32)))
+            params.base_model = Prompt.ask("Base model", choices=list(BASE_MODELS),
+                                           default=params.base_model or "llama3.1-8b")
+        elif dataset:
+            params.dataset_ids = [dataset]
+        save_parameters(params)
+        uc = "cyber_redteam" if prof_name == "cyber_redteam" else "defensive_pentest"
+        plan = build_plan(use_case or uc, parameters=params, days=days,
+                          dataset_id=(params.dataset_ids[0] if params.dataset_ids else None))
+        plan.notes.append(f"cyber flavor: {prof_name}")
+        _launch_plan(console, plan, provider=provider, offer=offer)
+
+    @app.command("custom")
+    def custom(
+        use_case: str = typer.Argument("general", help="free-text use case or preset key"),
+        dataset: str = typer.Option("", "--dataset", "-d", help="Hugging Face dataset repo id"),
+        base: str = typer.Option("", "--base", "-b"),
+        days: int = typer.Option(1, "--days"),
+        provider: str = typer.Option("dry-run", "--provider", "-p", help="dry-run|vastai"),
+        offer: Optional[int] = typer.Option(None, "--offer"),
+        interactive: bool = typer.Option(True, "--interactive/--no-interactive"),
+    ):
+        """Build a CUSTOM BOT with fully user-defined parameters - no limits."""
+        params = load_parameters() or parameter_profile("custom_blank")
+        if interactive:
+            console.print("[cyan]Custom bot builder[/cyan] - set any parameters you like.")
+            console.print("[dim](run `cyberspace robodaddy parameters guide` for the full list)[/dim]\n")
+            params.base_model = Prompt.ask("Base model", choices=list(BASE_MODELS),
+                                           default=params.base_model or "qwen2.5-7b")
+            params.method = Prompt.ask("Method", choices=["qlora", "lora", "full"],
+                                       default=params.method or "qlora")
+            params.epochs = int(Prompt.ask("epochs", default=str(params.epochs or 3)))
+            params.learning_rate = float(Prompt.ask("learning_rate", default=str(params.learning_rate or 2e-4)))
+            params.batch_size = int(Prompt.ask("batch_size", default=str(params.batch_size or 4)))
+            params.max_seq_len = int(Prompt.ask("max_seq_len", default=str(params.max_seq_len or 2048)))
+            params.lora_r = int(Prompt.ask("lora_r", default=str(params.lora_r or 16)))
+            ds_input = dataset or Prompt.ask("Hugging Face dataset repo id (owner/name) - pick anything",
+                                             default="tatsu-lab/alpaca")
+            params.dataset_ids = [ds_input]
+            params.system_prompt = Prompt.ask("Custom system prompt (blank = auto-compose)",
+                                              default=params.system_prompt)
+        else:
+            if dataset:
+                params.dataset_ids = [dataset]
+            if base:
+                params.base_model = base
+        save_parameters(params)
+        plan = build_plan(use_case, parameters=params, days=days,
+                          dataset_id=(params.dataset_ids[0] if params.dataset_ids else None))
+        _launch_plan(console, plan, provider=provider, offer=offer)
 
     # --- train -----------------------------------------------------------
     @app.command("train")

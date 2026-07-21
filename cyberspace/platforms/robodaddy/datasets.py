@@ -98,6 +98,78 @@ def dataset_by_id(dataset_id: str) -> dict:
         for entry in entries:
             if entry["id"] == dataset_id:
                 return dict(entry)
+    # Also check user-registered custom Hugging Face datasets.
+    custom = _custom_dataset_by_id(dataset_id)
+    if custom:
+        return dict(custom)
+    # If nothing is known about it, return a permissive entry so the user can
+    # still pick ANY Hugging Face repo id (RoboDaddy does not limit you to the
+    # curated catalog). The generated training script handles the real schema.
+    if "/" in dataset_id:
+        return {
+            "id": dataset_id, "name": dataset_id.rsplit("/", 1)[-1],
+            "size": "unknown", "license": "unknown",
+            "access": "check Hugging Face", "schema": "inspect before training",
+            "note": f"User-selected Hugging Face dataset {dataset_id}. Verify its "
+                    "license, access terms, and schema before a real training run.",
+        }
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# User-registered Hugging Face datasets (pick anything on the Hub)
+# ---------------------------------------------------------------------------
+def _custom_file():
+    from ...config import MODULES_DIR, ensure_dirs
+    ensure_dirs()
+    return MODULES_DIR / "robodaddy" / "custom_datasets.json"
+
+
+def custom_datasets() -> list[dict]:
+    """Return datasets the user has registered (any Hugging Face repo id)."""
+    import json
+    try:
+        path = _custom_file()
+        if not path.exists():
+            return []
+        data = json.loads(path.read_text())
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def register_dataset(dataset_id: str, *, name: str = "", size: str = "unknown",
+                     license: str = "unknown", access: str = "check Hugging Face",
+                     schema: str = "inspect before training", note: str = "",
+                     use_case: str = "general") -> dict:
+    """Register any Hugging Face dataset so it shows up alongside the catalog.
+
+    This is how a user picks an arbitrary dataset on the Hub: register it, then it
+    is searchable and selectable just like the curated entries. RoboDaddy does not
+    limit you to the built-in catalog.
+    """
+    import json
+    dataset_id = (dataset_id or "").strip()
+    if "/" not in dataset_id:
+        raise ValueError("dataset id must be a Hugging Face repo id like 'owner/name'")
+    entry = {
+        "id": dataset_id, "name": name or dataset_id.rsplit("/", 1)[-1],
+        "size": size, "license": license, "access": access, "schema": schema,
+        "note": note or f"User-registered Hugging Face dataset {dataset_id}.",
+        "use_case": use_case, "source": "user-registered",
+    }
+    path = _custom_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = [d for d in custom_datasets() if d.get("id") != dataset_id]
+    existing.append(entry)
+    path.write_text(json.dumps(existing, indent=2))
+    return entry
+
+
+def _custom_dataset_by_id(dataset_id: str) -> dict:
+    for d in custom_datasets():
+        if d.get("id") == dataset_id:
+            return dict(d)
     return {}
 
 
@@ -117,7 +189,14 @@ def search_datasets(query: str, limit: int = 10) -> list[dict]:
     tokens = _search_tokens(query)
     results: list[dict] = []
 
-    for use_case, entries in DATASETS.items():
+    searchable: dict[str, list[dict]] = {k: list(v) for k, v in DATASETS.items()}
+    # Include any Hugging Face datasets the user registered, so they are
+    # searchable/selectable just like the curated catalog.
+    from .datasets import custom_datasets  # local import to avoid cycles
+    if custom_datasets():
+        searchable["user_registered"] = custom_datasets()
+
+    for use_case, entries in searchable.items():
         label = PRESETS.get(use_case, {}).get("label", use_case)
         for d in entries:
             haystack = " ".join([

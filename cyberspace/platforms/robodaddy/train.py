@@ -93,13 +93,13 @@ if __name__ == "__main__":
     if tok.pad_token is None: tok.pad_token = tok.eos_token
     base = AutoModelForCausalLM.from_pretrained(MODEL, quantization_config=bnb, device_map="auto")
     base = prepare_model_for_kbit_training(base)
-    lora = LoraConfig(r={lora_r}, lora_alpha={lora_alpha}, lora_dropout=0.05,
+    lora = LoraConfig(r={lora_r}, lora_alpha={lora_alpha}, lora_dropout={lora_dropout},
                       target_modules=["q_proj","k_proj","v_proj","o_proj"], task_type="CAUSAL_LM")
     model = get_peft_model(base, lora)
     cfg = SFTConfig(output_dir=OUTPUT_DIR, num_train_epochs={epochs},
-                    per_device_train_batch_size={batch}, gradient_accumulation_steps=4,
+                    per_device_train_batch_size={batch}, gradient_accumulation_steps={grad_accum},
                     learning_rate={lr}, max_seq_length={seq_len}, logging_steps=25,
-                    save_strategy="epoch", bf16=True, report_to="none")
+                    save_strategy="epoch", bf16=True, report_to="none"{extra_sft_args})
     SFTTrainer(model=model, args=cfg, train_dataset=ds, processing_class=tok).train()
     model.save_pretrained(OUTPUT_DIR)
     print("DONE -> " + OUTPUT_DIR)
@@ -123,12 +123,34 @@ def write_job_files(plan: TrainingPlan) -> Path:
             "\nBefore a real run: accept the dataset terms on Hugging Face and "
             "export HF_TOKEN with read access.\n"
         )
+    extra = getattr(plan, "extra_hyperparams", {}) or {}
+    lora_dropout = extra.get("lora_dropout", 0.05)
+    grad_accum = extra.get("gradient_accumulation_steps", 4)
+    # Build extra SFTConfig kwargs from user parameters (weight_decay, warmup,
+    # scheduler, optimizer, seed, packing). RoboDaddy does not limit these.
+    extra_pairs = []
+    if "weight_decay" in extra:
+        extra_pairs.append(f"weight_decay={extra['weight_decay']}")
+    if "warmup_ratio" in extra:
+        extra_pairs.append(f"warmup_ratio={extra['warmup_ratio']}")
+    if "lr_scheduler" in extra:
+        extra_pairs.append(f'lr_scheduler_type="{extra["lr_scheduler"]}"')
+    if "optimizer" in extra:
+        extra_pairs.append(f'optim="{extra["optimizer"]}"')
+    if "seed" in extra:
+        extra_pairs.append(f"seed={extra['seed']}")
+    if "packing" in extra:
+        extra_pairs.append(f"packing={str(extra['packing'])}")
+    extra_sft_args = (", " + ", ".join(extra_pairs)) if extra_pairs else ""
+    # Use the attuned system prompt composed from the user's cyber focus +
+    # guardrails, falling back to the preset prompt when none was designed.
+    system_prompt = getattr(plan, "system_prompt", "") or _preset_system(plan.use_case)
     script = TRAIN_SCRIPT.format(
         base_hf=base_hf, dataset_id=plan.dataset_id,
         dataset_revision=plan.dataset_revision, epochs=plan.epochs,
         lr=plan.learning_rate, seq_len=plan.max_seq_len, lora_r=plan.lora_r,
-        lora_alpha=plan.lora_r * 2,
-        batch=plan.batch_size, system=_preset_system(plan.use_case),
+        lora_alpha=plan.lora_r * 2, lora_dropout=lora_dropout, grad_accum=grad_accum,
+        extra_sft_args=extra_sft_args, batch=plan.batch_size, system=system_prompt,
     )
     (jdir / "train.py").write_text(script)
     (jdir / "plan.json").write_text(json.dumps(plan.to_dict(), indent=2))

@@ -1,14 +1,29 @@
-"""robodaddy - plan and dispatch small LLM fine-tunes.
+"""robodaddy - design and train your own open source model.
 
-Pick a model use case, review public Hugging Face dataset recommendations,
-choose a base model and GPU class, then dry-run locally or dispatch a QLoRA
-training job to a Vast.ai instance. Completed local records can be served through
-an Ollama-compatible endpoint and configured as cyberspace's custom provider.
+RoboDaddy lets you design a model with a full set of parameters and then fine-tune
+an open-weights base on a dataset you pick. You can browse Hugging Face data
+(curated catalog + live discovery) and pick ANY dataset on the Hub, set your own
+training parameters (or use the built-in profiles), set the guardrails that are
+applied before the model is used, dispatch a QLoRA training job to a Vast.ai
+instance, then serve the finished model through an Ollama-compatible endpoint and
+configure it as cyberspace's custom provider.
 
-  datasets   browse public training-data recommendations for a request
+Build a CYBER BOT (authorized red-team / adversary emulation or defense) or a
+fully CUSTOM BOT with whatever parameters you choose - nothing is artificially
+limited. The cyber profile attunes training to full offensive reasoning,
+realistic adversary modeling, and attack-path reasoning: analyze footholds,
+explore exploitability, chain findings, and reason through full multi-step attack
+paths, grounded in real attack vectors and operator-inspired, multi-turn
+scenarios. Guardrails you set before deployment keep the resulting open source
+model scoped for authorized use, so the same reasoning supports autonomous
+red-team operations and deep defensive workflows with accuracy.
+
+  datasets   browse public training-data recommendations + register any HF dataset
+  parameters view/set/reset the full model-design parameters (hyperparameters,
+             cyber focus, guardrails) and get a built-in guide
+  cyber      build a cyber bot (red-team/adversary emulation or defense)
+  custom     build a custom bot with fully user-defined parameters - no limits
   usecases   see use-case presets -> recommended data + model + GPU
-  providers  list GPU-rental marketplaces
-  instances  search live GPU offers on Vast.ai
   build      guided intent -> live data -> GPU/price -> confirmed background training
   plan       advanced interactive planning without launch
   train      launch one or more detached jobs (or --foreground)
@@ -22,4 +37,4 @@ For LEGAL, authorized use. Training uses public datasets under their own license
 respect each dataset's terms. Cloud GPU rental costs real money - every command
 that would spend shows the cost first and asks before proceeding.
 """
-__version__ = "0.7.0"
+__version__ = "0.8.0"

@@ -467,16 +467,54 @@ cyberspace stickem router packages
 
 ---
 
-### 5. RoboDaddy 🤖 — guided AI building and background training
+### 5. RoboDaddy 🤖 — design and train your own open source model
 
-RoboDaddy builds your own AI through one guided flow. Enter a use case, explain your
-intent, and the configured Cyberspace provider ranks bounded live Hugging Face dataset
-results. RoboDaddy shows each option's size, license, access, and schema; automatically
-chooses a compatible base model and best-value GPU; then shows estimated time and price
-before asking whether to launch.
+RoboDaddy lets you **design a model with a full set of parameters** and then fine-tune
+an open-weights base on a dataset **you pick**. You can browse Hugging Face data
+(curated catalog + live discovery) and pick **any** dataset on the Hub, set your own
+training parameters (or use a built-in profile), set the **guardrails applied before
+use**, dispatch a QLoRA training job to a Vast.ai instance, then serve the finished
+model through an Ollama-compatible endpoint and plug it back in as your AI brain.
+
+Nothing about RoboDaddy artificially limits capability. You can build a **cyber bot**
+(authorized red-team / adversary emulation or defense) or a **fully custom bot**:
+
+- **Cyber bot** — attunes training to **full offensive reasoning**, realistic
+  **adversary modeling**, and **attack-path reasoning**: analyze footholds, explore
+  exploitability, chain findings, and reason through full multi-step attack paths,
+  grounded in real attack vectors and operator-inspired, multi-turn scenarios. This is
+  how it avoids the blind spots and refusals that break workflows and distort analysis.
+- **Guardrails you set before use** — declare your authorized scope, pick a guardrail
+  level, and list allowed/denied categories. The same reasoning then supports
+  **autonomous red-team operations and deep defensive workflows** with accuracy. (A hard
+  safety floor — CSAM, WMD instructions, real-world harm to non-consenting parties — is
+  always enforced and is not configurable.)
+
+> For LEGAL, authorized use. Training uses public datasets under their own licenses;
+> respect each dataset's terms.
 
 ```bash
+# STEP 0: See the full set of parameters you can set (with a built-in guide)
+cyberspace robodaddy parameters guide
+cyberspace robodaddy parameters profiles        # cyber_redteam | cyber_defensive | custom_blank
+cyberspace robodaddy parameters set --profile cyber_redteam
+cyberspace robodaddy parameters set --key epochs --value 5
+cyberspace robodaddy parameters set --key guardrails.guardrail_level --value red-team-engagement
+
+# STEP 1: Build a cyber bot (red-team / adversary emulation) — interactive, guided
+cyberspace robodaddy cyber redteam
+cyberspace robodaddy cyber defensive
+
+# STEP 2: Or build a fully custom bot with whatever parameters you choose — no limits
+cyberspace robodaddy custom "coding assistant"
+
+# STEP 3: Browse Hugging Face data and pick datasets (curated + live discovery)
+cyberspace robodaddy datasets "offensive pen security"
+cyberspace robodaddy datasets "attack path reasoning"
+
+# STEP 4: Start the recommended guided flow (any use case)
 cyberspace robodaddy build "coding assistant"
+cyberspace robodaddy usecases
 ```
 
 Training launches as a detached worker by default. **After RoboDaddy says it is queued,
@@ -486,32 +524,17 @@ training continues on the rented cloud instance; monitor the included Vast conso
 Price and duration are estimates, and no paid GPU is rented without explicit confirmation.
 
 ```bash
-# STEP 1: See recipes or start the recommended guided workflow
-cyberspace robodaddy usecases
-cyberspace robodaddy build "blue team alert assistant"
-
-# STEP 2: Search curated data directly (the guided flow also searches live HF data)
-cyberspace robodaddy datasets "offensive pen security"
-
-# STEP 3: See what GPUs you can rent and what they cost
-cyberspace robodaddy gpus
-
-# STEP 4: Search LIVE GPU prices on Vast.ai (a cloud GPU marketplace)
-cyberspace robodaddy instances --gpu RTX_4090
-
-# STEP 5: Build a plan manually (advanced alternative to `build`)
+# Advanced manual plan + background training (dry-run by default, no cost)
 cyberspace robodaddy plan "offensive pen security"
-
-# STEP 6: Launch background training (dry-run by default, no cost)
+cyberspace robodaddy gpus
+cyberspace robodaddy instances --gpu RTX_4090
 cyberspace robodaddy train offensive_pentest --provider dry-run
-
-# STEP 7: Check one or many concurrent jobs
 cyberspace robodaddy dashboard          # snapshot: queued/training/done/failed
 cyberspace robodaddy dashboard --watch  # live view; Ctrl-C closes only the dashboard
 cyberspace robodaddy jobs               # compact job table
-cyberspace robodaddy models       # see your trained models
+cyberspace robodaddy models             # see your trained models
 
-# STEP 8: Serve the model and plug it back into the system as the new brain
+# Serve the model and plug it back into the system as the new brain
 cyberspace robodaddy serve offensive_pentest-d1 --target ollama
 cyberspace robodaddy connect offensive_pentest-d1
 
