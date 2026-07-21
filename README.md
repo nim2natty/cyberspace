@@ -46,40 +46,230 @@ team lead. You give it a goal, and it hands out the work.
        you  →  ORCHESTRATOR  →  [ Recon → Exploit → Scribe → ... ]
 ```
 
-## Getting started
+## Installation
 
-**One command** gets you going:
+cyberspace needs **Python 3.10 or newer**. Pick your operating system below and
+copy-paste the commands into a terminal.
 
-```bash
-cyberspace quickstart
-```
+> **First run?** After installing, run `cyberspace setup` once to pick your AI
+> "brain" (a free local model via [Ollama](https://ollama.com), or a paid cloud
+> one like OpenAI), then start the team with `cyberspace swarm`.
 
-This asks you to pick an AI model (the "brain" — you can use a free local one like
-Ollama, or a paid cloud one like OpenAI), then drops you into the swarm.
+---
 
-**Or step by step:**
+### 🍎 macOS
 
-```bash
-cyberspace setup      # choose your AI model
-cyberspace swarm      # start the team
-```
+**Option A — one-line installer (recommended)**
 
-<details>
-<summary><b>Install on a cyberdeck / Raspberry Pi / from source</b></summary>
+Installs Homebrew if needed, pulls the offensive tools that exist on Mac
+(`nmap`, `sqlmap`, `masscan`), creates a virtual environment, and installs
+cyberspace + the IceBerg browser engine.
 
 ```bash
-# From source (on the cyberdeck)
-git clone https://github.com/nim2natty/cyberspace && cd cyberspace
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e . && playwright install chromium
-
-# Docker (anywhere)
-docker build -t cyberspace .
-docker run -it --rm cyberspace swarm
-
-# Flash a Raspberry Pi 5 image (see installer/rpi-build/)
+curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
-</details>
+
+Then activate the environment it created and configure the agent:
+
+```bash
+cd cyberspace
+source .venv/bin/activate
+cyberspace setup        # pick your AI model
+cyberspace swarm        # launch the team
+```
+
+**Option B — manual install**
+
+```bash
+# 1. Install Homebrew (if you don't have it):  https://brew.sh
+# 2. Get Python 3.11 + the security tools cyberspace wraps:
+brew install python@3.11 nmap sqlmap masscan git
+
+# 3. Clone the repo and create an isolated Python environment:
+git clone https://github.com/nim2natty/cyberspace.git
+cd cyberspace
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 4. Install cyberspace + the optional web UI + the IceBerg browser engine:
+pip install --upgrade pip
+pip install -e ".[ui,gui]"
+python -m playwright install chromium
+
+# 5. Configure the agent and launch:
+cyberspace setup
+cyberspace swarm
+```
+
+> **Apple Silicon note:** everything above works on both Intel and Apple Silicon
+> Macs. The IceBerg browser engine (`playwright install chromium`) downloads a
+> native build automatically.
+
+---
+
+### 🪟 Windows
+
+**Option A — WSL2 (recommended, full feature set)**
+
+The offensive toolchain (Kali tools, Tor, raw-socket WiFi) runs best on Linux,
+so on Windows the easiest path is the Windows Subsystem for Linux.
+
+```powershell
+# 1. In PowerShell (Run as Administrator), install WSL + Ubuntu:
+wsl --install -d Ubuntu
+# Restart your PC when prompted, then open the "Ubuntu" app and finish setup.
+```
+
+Inside the Ubuntu terminal:
+
+```bash
+# 2. One-line installer (installs Python, tools, and cyberspace):
+curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
+
+# 3. Activate the environment it created and configure:
+cd cyberspace
+source .venv/bin/activate
+cyberspace setup
+cyberspace swarm
+```
+
+**Option B — native Windows (Python only, no Linux-only tools)**
+
+Best if you only want the agent/AI features and the IceBerg browser.
+
+```powershell
+# 1. Install Python 3.10+ from https://python.org  (check "Add Python to PATH")
+# 2. Install Git from https://git-scm.com/download/win
+
+# 3. In PowerShell or Command Prompt:
+git clone https://github.com/nim2natty/cyberspace.git
+cd cyberspace
+py -m venv .venv
+.venv\Scripts\activate
+
+# 4. Install cyberspace + the IceBerg browser engine:
+py -m pip install --upgrade pip
+py -m pip install -e ".[ui,gui]"
+py -m playwright install chromium
+
+# 5. Configure the agent and launch:
+cyberspace setup
+cyberspace swarm
+```
+
+> **Native Windows limitations:** the offensive tool wrappers (nmap, sqlmap,
+> Metasploit, WiFi attacks, raw serial) expect a Linux environment. For the full
+> toolkit use Option A (WSL2) or Docker below.
+
+---
+
+### 🐧 Linux
+
+**Option A — one-line installer (Debian / Ubuntu / Kali / Fedora)**
+
+Detects your distro, installs Python + the offensive tools via `apt` or `dnf`,
+creates a virtual environment, and installs cyberspace.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
+```
+
+Then activate and configure:
+
+```bash
+cd cyberspace
+source .venv/bin/activate
+cyberspace setup
+cyberspace swarm
+```
+
+**Option B — manual install (any distro with Python 3.10+)**
+
+```bash
+# 1. (Debian/Ubuntu/Kali) install Python + the tools cyberspace wraps:
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip python3-venv git \
+     nmap masscan sqlmap gobuster whatweb macchanger tor proxychains4 seclists
+
+# 1-alt. (Fedora) use dnf:
+sudo dnf install -y python3 python3-pip python3-virtualenv git nmap sqlmap masscan
+
+# 2. Clone and create an isolated environment:
+git clone https://github.com/nim2natty/cyberspace.git
+cd cyberspace
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install cyberspace + the IceBerg browser engine:
+pip install --upgrade pip
+pip install -e ".[ui,gui]"
+python -m playwright install chromium
+
+# 4. Configure the agent and launch:
+cyberspace setup
+cyberspace swarm
+```
+
+---
+
+### 🐳 Docker (macOS, Windows, Linux — same commands everywhere)
+
+The Docker image is built on Kali Linux and ships every offensive tool
+cyberspace can drive. It runs identically on any OS that has Docker.
+
+```bash
+# 1. Build the image (from a clone of the repo):
+git clone https://github.com/nim2natty/cyberspace.git
+cd cyberspace
+docker build -t cyberspace -f installer/docker/Dockerfile .
+
+# 2. Run the dashboard (persists your config/data to a named volume):
+docker run -it --rm -v cyberspace-data:/data cyberspace
+
+# 3. Configure the agent (first time only):
+docker run -it --rm -v cyberspace-data:/data cyberspace setup
+
+# 4. Launch the team:
+docker run -it --rm -v cyberspace-data:/data cyberspace swarm
+```
+
+> **Exposing hardware in Docker:** for the StickEm serial devices add
+> `--device /dev/ttyUSB0`, and for a visible IceBerg browser on a Linux host add
+> `-e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix`.
+
+---
+
+### 🍓 Raspberry Pi / cyberdeck (from source)
+
+For a headless Raspberry Pi 5 cyberdeck, build from source directly on the
+device (a prebuilt image helper lives in
+[`installer/rpi-build/`](installer/rpi-build/)):
+
+```bash
+# On the Pi (Debian/Ubuntu-based):
+sudo apt-get update
+sudo apt-get install -y python3 python3-pip python3-venv git nmap
+
+git clone https://github.com/nim2natty/cyberspace.git
+cd cyberspace
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
+cyberspace setup        # pick a local model (e.g. Ollama) — works offline
+cyberspace swarm
+```
+
+---
+
+### Verify it works
+
+```bash
+cyberspace --version     # should print the installed version
+cyberspace doctor        # green check marks = ready to go
+```
+
+If `doctor` shows anything missing, the install commands above will fix it.
 
 
 ## The easiest way: let the AI do everything
