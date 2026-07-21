@@ -96,6 +96,9 @@ pip install --upgrade pip -q
 pip install -e . -q || die "cyberspace pip install failed"
 say "downloading the IceBerg browser engine (chromium)..."
 python -m playwright install chromium -q || warn "playwright chromium install needs network"
+say "installing the global cyberspace launcher..."
+bash "${ROOT_DIR}/installer/install-launcher.sh" "${ROOT_DIR}" \
+  || die "launcher install failed"
 ok "cyberspace installed"
 
 # --- next steps -------------------------------------------------------------
@@ -103,13 +106,12 @@ cat <<EOF
 
 ${green}All set.${nc} cyberspace is installed in: ${ROOT_DIR}
 
-Next steps (run these in a normal terminal, not the installer):
+The ${cyan}cyberspace${nc} command now starts the virtual environment automatically.
+Open a new terminal if this is the first time ~/.local/bin was added to PATH.
 
-  1) go to the install dir:  ${cyan}cd ${ROOT_DIR}${nc}
-  2) activate the python env: ${cyan}source .venv/bin/activate${nc}
-  3) configure your AI brain: ${cyan}cyberspace setup${nc}      ${yellow}<-- do this FIRST${nc}
-  4) verify everything:       ${cyan}cyberspace doctor${nc}
-  5) launch the team:         ${cyan}cyberspace swarm${nc}
+  1) configure your AI brain: ${cyan}cyberspace setup${nc}      ${yellow}<-- do this FIRST${nc}
+  2) verify everything:       ${cyan}cyberspace doctor${nc}
+  3) open the program:         ${cyan}cyberspace${nc}
 
 Docs: https://github.com/nim2natty/cyberspace
 EOF

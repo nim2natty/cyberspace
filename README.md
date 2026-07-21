@@ -74,7 +74,8 @@ copy-paste the commands into a terminal.
 > "brain". You can use **any LLM** — a free local model via [Ollama](https://ollama.com),
 > or a cloud one (OpenAI, Claude, **z.ai**, DeepSeek, Groq, Gemini, OpenRouter,
 > and more — see [Connect any LLM](#connect-any-llm)). Then start the team with
-> `cyberspace swarm`.
+> `cyberspace`. The installer creates a launcher that enters the private Python
+> environment automatically—no `cd` or `source .venv/bin/activate` is required.
 
 ---
 
@@ -90,13 +91,11 @@ cyberspace + the IceBerg browser engine.
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
-Then activate the environment it created and configure the agent:
+Then open a new terminal and configure the agent. The launcher handles the venv:
 
 ```bash
-cd cyberspace
-source .venv/bin/activate
 cyberspace setup        # pick your AI model
-cyberspace swarm        # launch the team
+cyberspace              # open the program from any directory
 ```
 
 **Option B — manual install**
@@ -116,10 +115,11 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -e ".[ui,gui]"
 python -m playwright install chromium
+bash installer/install-launcher.sh
 
 # 5. Configure the agent and launch:
 cyberspace setup
-cyberspace swarm
+cyberspace
 ```
 
 > **Apple Silicon note:** everything above works on both Intel and Apple Silicon
@@ -147,11 +147,9 @@ Inside the Ubuntu terminal:
 # 2. One-line installer (installs Python, tools, and cyberspace):
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 
-# 3. Activate the environment it created and configure:
-cd cyberspace
-source .venv/bin/activate
+# 3. Configure and open from any directory (the venv is automatic):
 cyberspace setup
-cyberspace swarm
+cyberspace
 ```
 
 **Option B — native Windows (Python only, no Linux-only tools)**
@@ -195,13 +193,11 @@ creates a virtual environment, and installs cyberspace.
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
-Then activate and configure:
+Then open a new terminal and configure. The launcher handles the venv:
 
 ```bash
-cd cyberspace
-source .venv/bin/activate
 cyberspace setup
-cyberspace swarm
+cyberspace
 ```
 
 **Option B — manual install (any distro with Python 3.10+)**
@@ -225,10 +221,11 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -e ".[ui,gui]"
 python -m playwright install chromium
+bash installer/install-launcher.sh
 
 # 4. Configure the agent and launch:
 cyberspace setup
-cyberspace swarm
+cyberspace
 ```
 
 ---
@@ -277,8 +274,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
+bash installer/install-launcher.sh
 cyberspace setup        # pick a local model (e.g. Ollama) — works offline
-cyberspace swarm
+cyberspace
 ```
 
 ---
@@ -289,6 +287,15 @@ cyberspace swarm
 cyberspace --version     # should print the installed version
 cyberspace doctor        # green check marks = ready to go
 ```
+
+If you installed an older checkout that still requires venv activation, repair it once:
+
+```bash
+cd /path/to/cyberspace
+bash installer/install-launcher.sh
+```
+
+After that, opening a new terminal and typing `cyberspace` starts the program directly.
 
 If `doctor` shows anything missing, the install commands above will fix it.
 
