@@ -6,28 +6,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${1:-$(dirname "${SCRIPT_DIR}")}"
 BIN_DIR="${CYBERSPACE_BIN_DIR:-${HOME}/.local/bin}"
 LAUNCHER="${BIN_DIR}/cyberspace"
-PYTHON="${ROOT_DIR}/.venv/bin/python"
+ENTRYPOINT="${ROOT_DIR}/.venv/bin/cyberspace"
 
-if [[ ! -x "${PYTHON}" ]]; then
-  printf '[x] cyberspace virtual environment not found at %s\n' "${PYTHON}" >&2
-  printf '    Create it first: python3 -m venv "%s/.venv"\n' "${ROOT_DIR}" >&2
+if [[ ! -x "${ENTRYPOINT}" ]]; then
+  printf '[x] cyberspace entry point not found at %s\n' "${ENTRYPOINT}" >&2
+  printf '    Repair it: cd "%s" && .venv/bin/pip install -e .\n' "${ROOT_DIR}" >&2
   exit 1
 fi
 
 mkdir -p "${BIN_DIR}"
 printf -v quoted_root '%q' "${ROOT_DIR}"
+printf -v quoted_launcher '%q' "${LAUNCHER}"
 tmp="${LAUNCHER}.tmp.$$"
 cat >"${tmp}" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+# Managed by cyberspace installer.
 CYBERSPACE_ROOT=${quoted_root}
-PYTHON="\${CYBERSPACE_ROOT}/.venv/bin/python"
-if [[ ! -x "\${PYTHON}" ]]; then
-  printf 'cyberspace: virtual environment is missing at %s\\n' "\${PYTHON}" >&2
-  printf 'Repair it with: cd %q && python3 -m venv .venv && .venv/bin/pip install -e .\\n' "\${CYBERSPACE_ROOT}" >&2
+export CYBERSPACE_ROOT
+export CYBERSPACE_LAUNCHER_PATH=${quoted_launcher}
+ENTRYPOINT="\${CYBERSPACE_ROOT}/.venv/bin/cyberspace"
+if [[ ! -x "\${ENTRYPOINT}" ]]; then
+  printf 'cyberspace: installed entry point is missing at %s\\n' "\${ENTRYPOINT}" >&2
+  printf 'Repair it with: cd %q && .venv/bin/pip install -e .\\n' "\${CYBERSPACE_ROOT}" >&2
   exit 127
 fi
-exec "\${PYTHON}" -m cyberspace "\$@"
+exec "\${ENTRYPOINT}" "\$@"
 EOF
 chmod 755 "${tmp}"
 mv -f "${tmp}" "${LAUNCHER}"

@@ -365,6 +365,39 @@ def doctor():
         console.print("[yellow]→ Run `cyberspace setup` to configure the agent (recommended first).[/yellow]")
 
 
+@app.command()
+def uninstall(
+    remove_source: bool = typer.Option(False, "--remove-source", help="also delete the checkout"),
+    purge_data: bool = typer.Option(False, "--purge-data", help="also delete config, projects, and memory"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="skip confirmation"),
+):
+    """Uninstall cyberspace. Saved projects and configuration are kept by default."""
+    import os
+    from pathlib import Path
+    from rich.prompt import Confirm
+    from .config import HOME
+    from .uninstall import remove_installation
+
+    root = Path(os.environ.get("CYBERSPACE_ROOT", Path(__file__).resolve().parents[1]))
+    launcher = Path(os.environ.get(
+        "CYBERSPACE_LAUNCHER_PATH", Path.home() / ".local" / "bin" / "cyberspace"))
+    extras = []
+    if remove_source:
+        extras.append("source checkout")
+    if purge_data:
+        extras.append("saved projects/configuration")
+    detail = ", ".join(extras) if extras else "launcher and private Python environment"
+    if not yes and not Confirm.ask(f"Remove cyberspace ({detail})?", default=False):
+        console.print("[dim]Uninstall cancelled.[/dim]")
+        return
+    for action in remove_installation(root, launcher, HOME,
+                                      remove_source=remove_source, purge_data=purge_data):
+        console.print(f"[green]✓[/green] {action}")
+    if not purge_data:
+        console.print(f"[dim]Saved projects and configuration kept at {HOME}[/dim]")
+    console.print("[green]Cyberspace uninstalled.[/green]")
+
+
 def _attach_platforms() -> None:
     """Register each loaded platform's CLI as a subcommand (idempotent)."""
     if getattr(app, "_cyberspace_attached", False):

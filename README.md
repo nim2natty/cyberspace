@@ -76,6 +76,7 @@ On macOS, Linux, Raspberry Pi OS, or Windows through WSL, the installer creates 
 private virtual environment and a global launcher for it:
 
 ```bash
+# Install
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
@@ -85,6 +86,19 @@ Open a new terminal, then:
 cyberspace setup     # connect a local or cloud AI model once
 cyberspace doctor    # check platforms and host tools
 cyberspace           # open the Cyber Kill Chain workspace
+```
+
+### Uninstall
+
+```bash
+cyberspace uninstall
+```
+
+This removes the launcher and private Python environment but keeps projects and settings.
+To remove everything, including the checkout and saved data:
+
+```bash
+cyberspace uninstall --remove-source --purge-data
 ```
 
 The `cyberspace` launcher works from any directory and enters the private Python
