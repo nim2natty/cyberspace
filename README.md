@@ -70,12 +70,27 @@ and network failures are reported because switching models cannot repair them.
 cyberspace needs **Python 3.10 or newer**. Pick your operating system below and
 copy-paste the commands into a terminal.
 
-> **First run?** After installing, run `cyberspace setup` once to connect your AI
-> "brain". You can use **any LLM** — a free local model via [Ollama](https://ollama.com),
-> or a cloud one (OpenAI, Claude, **z.ai**, DeepSeek, Groq, Gemini, OpenRouter,
-> and more — see [Connect any LLM](#connect-any-llm)). Then start the team with
-> `cyberspace`. The installer creates a launcher that enters the private Python
-> environment automatically—no `cd` or `source .venv/bin/activate` is required.
+### Quick start
+
+On macOS, Linux, Raspberry Pi OS, or Windows through WSL, the installer creates a
+private virtual environment and a global launcher for it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
+```
+
+Open a new terminal, then:
+
+```bash
+cyberspace setup     # connect a local or cloud AI model once
+cyberspace doctor    # check platforms and host tools
+cyberspace           # open the Cyber Kill Chain workspace
+```
+
+The `cyberspace` launcher works from any directory and enters the private Python
+environment automatically. You do **not** need to `cd` into the repository or run
+`source .venv/bin/activate`. All subcommands work through the same launcher, for
+example `cyberspace project list` and `cyberspace airbender status`.
 
 ---
 
@@ -87,16 +102,8 @@ Installs Homebrew if needed, pulls the offensive tools that exist on Mac
 (`nmap`, `sqlmap`, `masscan`), creates a virtual environment, and installs
 cyberspace + the IceBerg browser engine.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
-```
-
-Then open a new terminal and configure the agent. The launcher handles the venv:
-
-```bash
-cyberspace setup        # pick your AI model
-cyberspace              # open the program from any directory
-```
+Run the [Quick start](#quick-start) installer above, open a new terminal, and type
+`cyberspace`.
 
 **Option B — manual install**
 
@@ -109,12 +116,11 @@ brew install python@3.11 nmap sqlmap masscan git
 git clone https://github.com/nim2natty/cyberspace.git
 cd cyberspace
 python3 -m venv .venv
-source .venv/bin/activate
 
 # 4. Install cyberspace + the optional web UI + the IceBerg browser engine:
-pip install --upgrade pip
-pip install -e ".[ui,gui]"
-python -m playwright install chromium
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e ".[ui,gui]"
+.venv/bin/python -m playwright install chromium
 bash installer/install-launcher.sh
 
 # 5. Configure the agent and launch:
@@ -173,8 +179,12 @@ py -m playwright install chromium
 
 # 5. Configure the agent and launch:
 cyberspace setup
-cyberspace swarm
+cyberspace
 ```
+
+> The automatic global launcher is currently for macOS/Linux shells, including WSL.
+> On native Windows, activate `.venv\Scripts\activate` before using `cyberspace`, or
+> invoke `.venv\Scripts\cyberspace.exe` directly.
 
 > **Native Windows limitations:** the offensive tool wrappers (nmap, sqlmap,
 > Metasploit, WiFi attacks, raw serial) expect a Linux environment. For the full
@@ -189,16 +199,8 @@ cyberspace swarm
 Detects your distro, installs Python + the offensive tools via `apt` or `dnf`,
 creates a virtual environment, and installs cyberspace.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
-```
-
-Then open a new terminal and configure. The launcher handles the venv:
-
-```bash
-cyberspace setup
-cyberspace
-```
+Run the [Quick start](#quick-start) installer above, open a new terminal, and type
+`cyberspace`.
 
 **Option B — manual install (any distro with Python 3.10+)**
 
@@ -215,12 +217,11 @@ sudo dnf install -y python3 python3-pip python3-virtualenv git nmap sqlmap massc
 git clone https://github.com/nim2natty/cyberspace.git
 cd cyberspace
 python3 -m venv .venv
-source .venv/bin/activate
 
 # 3. Install cyberspace + the IceBerg browser engine:
-pip install --upgrade pip
-pip install -e ".[ui,gui]"
-python -m playwright install chromium
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e ".[ui,gui]"
+.venv/bin/python -m playwright install chromium
 bash installer/install-launcher.sh
 
 # 4. Configure the agent and launch:
@@ -247,8 +248,8 @@ docker run -it --rm -v cyberspace-data:/data cyberspace
 # 3. Configure the agent (first time only):
 docker run -it --rm -v cyberspace-data:/data cyberspace setup
 
-# 4. Launch the team:
-docker run -it --rm -v cyberspace-data:/data cyberspace swarm
+# 4. Open the Cyber Kill Chain workspace:
+docker run -it --rm -v cyberspace-data:/data cyberspace
 ```
 
 > **Exposing hardware in Docker:** for the StickEm serial devices add
@@ -271,9 +272,8 @@ sudo apt-get install -y python3 python3-pip python3-venv git nmap
 git clone https://github.com/nim2natty/cyberspace.git
 cd cyberspace
 python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e .
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e .
 bash installer/install-launcher.sh
 cyberspace setup        # pick a local model (e.g. Ollama) — works offline
 cyberspace
@@ -288,14 +288,21 @@ cyberspace --version     # should print the installed version
 cyberspace doctor        # green check marks = ready to go
 ```
 
-If you installed an older checkout that still requires venv activation, repair it once:
+### Upgrade or repair an existing installation
+
+If an older checkout still requires venv activation, update it and install the launcher
+once:
 
 ```bash
-cd /path/to/cyberspace
+cd ~/cyberspace                    # use your actual checkout path
+git pull --ff-only
+.venv/bin/pip install -e .
 bash installer/install-launcher.sh
 ```
 
 After that, opening a new terminal and typing `cyberspace` starts the program directly.
+If the shell still remembers an old command location, run `hash -r` (bash) or `rehash`
+(zsh), or simply open another terminal.
 
 If `doctor` shows anything missing, the install commands above will fix it.
 
@@ -336,7 +343,7 @@ variable (`OPENAI_API_KEY`, `ZAI_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, �
 ```bash
 cyberspace setup            # pick a provider + paste your key
 cyberspace setup --force    # reconfigure / switch providers later
-cyberspace swarm            # go
+cyberspace                  # open the workspace
 ```
 
 ### Use a model you trained with RoboDaddy
@@ -347,7 +354,7 @@ Train a model with RoboDaddy, serve it locally, then connect it as your AI brain
 cyberspace robodaddy plan "offensive pent security"
 cyberspace robodaddy train offensive_pentest --provider dry-run   # free dry-run
 cyberspace robodaddy serve offensive_pentest-d1 --target ollama    # serve it
-cyberspace setup            # pick option 15 (RoboDaddy) and choose your model
+cyberspace setup            # choose RoboDaddy by name and select your served model
 # - or -
 cyberspace robodaddy use offensive_pentest-d1                      # set it directly
 ```
@@ -357,10 +364,11 @@ cyberspace robodaddy use offensive_pentest-d1                      # set it dire
 ## The easiest way: let the AI do everything
 
 ```bash
-cyberspace swarm
+cyberspace
 ```
 
-This drops you into a chat. Just type what you want in plain English:
+This opens the workspace. Choose **Swarm mode**, select a saved project or Ghost Mode,
+then type what you want in plain English:
 
 ```
 cyberspace objective> scan 192.168.1.0/24, find web apps, test them, then write a report
@@ -671,7 +679,7 @@ cyberspace robodaddy train offensive_pentest --provider vastai --offer 123456
 ## Projects — your Actions-on-Objectives prompt library
 
 Projects let you keep separate prompt histories for different tasks. When a
-project is **active**, every prompt you send to the AI (in `swarm` or `agent`)
+project is **active**, every prompt you send to the AI (in Swarm or agent mode)
 is automatically saved to that project's folder and becomes scoped Kill Chain memory.
 Later you can open the folder
 and see every prompt you used.
@@ -712,9 +720,9 @@ Ghost Mode when Swarm opens if a session should not be written to this library.
 # The AI remembers you — see what it's learned:
 cyberspace memory show
 
-# Change the AI brain at any time:
-cyberspace iceberg model list                      # see available models
-cyberspace iceberg model switch qwen2.5-coder:7b   # switch to a different model
+# See providers or change the AI brain at any time:
+cyberspace providers
+cyberspace setup --force
 
 # Generate a report from everything you've done:
 cyberspace report --out my_report.md
