@@ -98,6 +98,10 @@ Mullvad, Tor, nmap, and other utilities remain optional host applications. Insta
 the capabilities you need from their official source or operating-system package manager;
 `cyberspace doctor` reports what is available.
 
+> **Windows ARM note:** the standalone CLI, privacy audit, VPN/DNS controls, and browser
+> are supported. The optional Streamlit `iceberg gui` is omitted because its `pyarrow`
+> dependency does not publish a Windows ARM wheel.
+
 ### Upgrade and uninstall
 
 Run the same installer again to replace the executable with the latest verified release.

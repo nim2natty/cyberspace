@@ -11,18 +11,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-24.04, platform: linux, arch: x86_64}
-          - {os: ubuntu-24.04-arm, platform: linux, arch: arm64}
-          - {os: macos-15-intel, platform: macos, arch: x86_64}
-          - {os: macos-14, platform: macos, arch: arm64}
-          - {os: windows-2025, platform: windows, arch: x86_64}
-          - {os: windows-11-arm, platform: windows, arch: arm64}
+          - {os: ubuntu-24.04, platform: linux, arch: x86_64, gui: true}
+          - {os: ubuntu-24.04-arm, platform: linux, arch: arm64, gui: true}
+          - {os: macos-15-intel, platform: macos, arch: x86_64, gui: true}
+          - {os: macos-14, platform: macos, arch: arm64, gui: true}
+          - {os: windows-2025, platform: windows, arch: x86_64, gui: true}
+          # Streamlit's pyarrow dependency has no Windows ARM wheel.
+          - {os: windows-11-arm, platform: windows, arch: arm64, gui: false}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: python -m pip install --upgrade pip ".[gui,build]"
+      - run: python -m pip install --upgrade pip ".[dev,build]"
+      - name: Install optional GUI dependencies
+        if: matrix.gui
+        run: python -m pip install ".[gui]"
       - run: python -m pytest -q
       - run: pyinstaller --clean --noconfirm cyberspace.spec
       - name: Name and checksum artifact (Unix)
