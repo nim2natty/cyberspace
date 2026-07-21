@@ -6,98 +6,142 @@ the other platforms, because every module's agentic features depend on it.
 """
 from __future__ import annotations
 
+import os
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from ..config import DEFAULT_OLLAMA_URL, SUGGESTED_MODELS
 from .config import is_configured, load_config, save_config
-from .llm import LLMConfig
+from .llm import LLMConfig, ProviderError, get_provider
+from .providers import (
+    DEFAULT_OLLAMA_URL,
+    all_specs,
+    resolve_choice,
+    served_robodaddy_models,
+)
 
 console = Console()
 
 
 def _banner() -> None:
     console.print(Panel.fit(
-        "[bold cyan]cyberbot[/bold cyan] — agent setup\n"
-        "[dim]Configure your personal pentest agent first. Every platform "
-        "(IceBerg, AirBender, ShadowDragon, StickEm, RoboDaddy) plugs into this agent, "
-        "so this step unlocks all agentic features.[/dim]",
+        "[bold cyan]cyberspace[/bold cyan] - connect your AI brain\n"
+        "[dim]Pick any LLM (local, OpenAI, Claude, z.ai, DeepSeek, Groq, "
+        "Gemini, a model you trained, ...) and we'll wire it up. Every platform "
+        "(IceBerg, AirBender, ShadowDragon, StickEm, RoboDaddy) plugs into this.[/dim]",
         border_style="cyan",
     ))
 
 
-def _check_ollama() -> bool:
-    """Detect a running local Ollama (best option for learners / the Pi)."""
+def _check_ollama(base_url: str) -> bool:
     import httpx
     try:
-        r = httpx.get(f"{DEFAULT_OLLAMA_URL}/api/tags", timeout=2.0)
+        r = httpx.get(f"{base_url}/api/tags", timeout=2.0)
         return r.status_code == 200
     except Exception:
         return False
 
 
-def _list_ollama_models() -> list[str]:
+def _list_ollama_models(base_url: str) -> list[str]:
     import httpx
     try:
-        r = httpx.get(f"{DEFAULT_OLLAMA_URL}/api/tags", timeout=3.0)
+        r = httpx.get(f"{base_url}/api/tags", timeout=3.0)
         return [m["name"] for m in r.json().get("models", [])]
     except Exception:
         return []
 
 
+def _gather_ollama(spec) -> tuple[str, str, str]:
+    """Returns (base_url, api_key, model) for Ollama."""
+    base_url = spec.base_url
+    if _check_ollama(base_url):
+        console.print(f"[green]Found a running Ollama at {base_url}.[/green]")
+        models = _list_ollama_models(base_url)
+        if models:
+            console.print("Installed models: " + ", ".join(models))
+            model = Prompt.ask("Model to use", default=models[0])
+        else:
+            console.print(f"[yellow]No models pulled yet.[/yellow] Try: ollama pull {spec.models[0]}")
+            model = Prompt.ask("Model name", default=spec.models[0])
+    else:
+        console.print(f"[yellow]No Ollama detected at {base_url}.[/yellow]")
+        console.print("Install it free from https://ollama.com then re-run, or point at a remote one.")
+        base_url = Prompt.ask("Ollama base URL", default=base_url)
+        model = Prompt.ask("Model name", default=spec.models[0])
+    return base_url, "", model
+
+
+def _gather_robodaddy() -> tuple[str, str, str] | None:
+    """Returns (endpoint, api_key, model) for a served RoboDaddy model, or None."""
+    served = served_robodaddy_models()
+    if not served:
+        console.print("[yellow]No served RoboDaddy models found.[/yellow]")
+        console.print("Train and serve one first: cyberspace robodaddy train <use-case> "
+                      "&& cyberspace robodaddy serve <name>")
+        return None
+    console.print("Served models: " + ", ".join(served))
+    model = Prompt.ask("Model to use", default=served[0])
+    from ..platforms.robodaddy.serve import use_as_cyberbot
+    endpoint, api_key = use_as_cyberbot(model)
+    return endpoint, api_key, model
+
+
 def run_wizard(force: bool = False) -> LLMConfig:
     if is_configured() and not force:
         cfg = load_config()
-        console.print(f"[green]Agent already configured:[/green] "
-                      f"{cfg.provider}/{cfg.model}")
+        console.print(f"[green]AI already connected:[/green] {cfg.provider}/{cfg.model}")
         if not Confirm.ask("Reconfigure?", default=False):
             return cfg
 
     _banner()
 
-    # 1) pick provider
-    prov_table = Table("option", "provider", "best for")
-    prov_table.add_row("1", "ollama", "local, offline, free (recommended for the Pi)")
-    prov_table.add_row("2", "openai", "OpenAI API (gpt-4o-mini)")
-    prov_table.add_row("3", "anthropic", "Claude API")
-    prov_table.add_row("4", "custom", "any OpenAI-compatible endpoint")
-    console.print(prov_table)
+    # 1) pick provider from the catalog
+    t = Table("#", "provider", "key?", "best for", title="Available LLMs")
+    for i, spec in enumerate(all_specs(), 1):
+        keycol = "no" if not spec.needs_key else "yes"
+        t.add_row(str(i), spec.display, keycol, spec.note)
+    console.print(t)
 
-    choice = Prompt.ask("Choose provider", choices=["1", "2", "3", "4"], default="1")
-    provider = {"1": "ollama", "2": "openai", "3": "anthropic", "4": "custom"}[choice]
+    choice = Prompt.ask("Pick a provider (number or name)", default="1")
+    spec = resolve_choice(choice)
+    console.print(f"[green]Selected:[/green] {spec.display}")
 
-    # 2) connection details
-    base_url = DEFAULT_OLLAMA_URL
+    # 2) gather connection details per provider
     api_key = ""
-    model = ""
+    model = spec.models[0] if spec.models else ""
+    base_url = spec.base_url
 
-    if provider == "ollama":
-        if _check_ollama():
-            console.print("[green]Found a running Ollama.[/green]")
-            models = _list_ollama_models()
-            if models:
-                console.print("Installed models: " + ", ".join(models))
-                model = Prompt.ask("Model to use", default=models[0])
-            else:
-                console.print("[yellow]No models pulled yet.[/yellow] "
-                              f"Try: ollama pull {SUGGESTED_MODELS['ollama'][0]}")
-                model = Prompt.ask("Model name", default=SUGGESTED_MODELS["ollama"][0])
-        else:
-            console.print("[yellow]No Ollama detected on localhost:11434.[/yellow]")
-            console.print("Install it free from https://ollama.com then re-run, "
-                          "or point at a remote Ollama.")
-            base_url = Prompt.ask("Ollama base URL", default=DEFAULT_OLLAMA_URL)
-            model = Prompt.ask("Model name", default=SUGGESTED_MODELS["ollama"][0])
+    if spec.key == "ollama":
+        base_url, api_key, model = _gather_ollama(spec)
+    elif spec.key == "robodaddy":
+        got = _gather_robodaddy()
+        if got is None:
+            console.print("[red]No RoboDaddy model selected.[/red] Re-run setup and pick another provider.")
+            raise typer.Exit(1)
+        base_url, api_key, model = got
+    elif spec.key == "custom":
+        base_url = Prompt.ask("Base URL (OpenAI-compatible /chat/completions base)",
+                              default="http://localhost:8000/v1")
+        model = Prompt.ask("Model name", default="local-model")
+        api_key = Prompt.ask("API key (blank = none)", password=True, default="")
     else:
-        base_url = Prompt.ask("API base URL (blank = provider default)",
-                              default="")
-        api_key = Prompt.ask("API key", password=True, default="")
-        suggested = SUGGESTED_MODELS.get(provider, [])
-        default_model = suggested[0] if suggested else ""
-        model = Prompt.ask("Model name", default=default_model)
+        # Cloud provider from the catalog: env var first, then prompt for the key.
+        env_val = os.environ.get(spec.env_key, "") if spec.env_key else ""
+        if env_val:
+            console.print(f"[green]Found an API key in ${spec.env_key}.[/green]")
+            api_key = env_val
+        else:
+            if spec.key_url:
+                console.print(f"[dim]Get a key: {spec.key_url}[/dim]")
+            api_key = Prompt.ask("API key", password=True, default="")
+        if spec.models:
+            console.print("Models: " + ", ".join(spec.models))
+        model = Prompt.ask("Model name", default=spec.models[0] if spec.models else "")
+        if not spec.local:
+            base_url = Prompt.ask("Base URL (blank = provider default)", default=spec.base_url)
 
     # 3) persona (optional system prompt)
     sys_prompt = Prompt.ask(
@@ -105,15 +149,30 @@ def run_wizard(force: bool = False) -> LLMConfig:
         default="")
 
     cfg = LLMConfig(
-        provider=provider, model=model, base_url=base_url,
+        provider=spec.key, model=model, base_url=base_url,
         api_key=api_key, system_prompt=sys_prompt,
     )
+
+    # 4) quick connectivity test (one tiny request). Failures are non-fatal.
+    if Confirm.ask("Test the connection now?", default=True):
+        try:
+            prov = get_provider(cfg)
+            prov.chat([{"role": "user", "content": "Reply with the single word: ok"}], [])
+            console.print("[green]Connection OK.[/green]")
+        except ProviderError as e:
+            console.print(Panel.fit(
+                f"[red]Connection check failed:[/red]\n{e}\n\n"
+                "[dim]The config is still saved. Fix the issue above and re-run "
+                "`cyberspace setup`, or answer 'no' to skip the test.[/dim]",
+                border_style="red"))
+        except Exception as e:  # last-resort: keep it readable
+            console.print(f"[yellow]Could not verify the connection: {e}[/yellow]")
+
     save_config(cfg)
     console.print(Panel.fit(
-        f"[green]Agent configured.[/green]\n"
-        f"provider: [bold]{provider}[/bold]   model: [bold]{model}[/bold]\n\n"
-        f"[dim]Next: run `cyberspace agent` to chat, or `cyberspace iceberg/airbender/...`"
-        f" for a platform. Tools register automatically once modules load.[/dim]",
-        border_style="green",
-    ))
+        f"[green]AI connected.[/green]\n"
+        f"provider: [bold]{spec.key}[/bold]   model: [bold]{model}[/bold]\n\n"
+        "[dim]Next: `cyberspace swarm` to command the team, or `cyberspace agent` "
+        "for a single chat. Tools register automatically.[/dim]",
+        border_style="green"))
     return cfg

@@ -43,11 +43,26 @@ def show_modules() -> None:
 
 def run_swarm() -> None:
     from ..agent.config import is_configured, load_config
+    from ..agent.llm import ProviderError
     from ..swarm import Swarm
     if not is_configured():
-        console.print("[red]Agent not configured.[/red] Run: cyberspace setup"); return
+        console.print(Panel.fit(
+            "[red]No AI brain connected yet.[/red]\n\n"
+            "The swarm needs an LLM to think. Connect one first:\n"
+            "  [cyan]cyberspace setup[/cyan]\n\n"
+            "[dim]Pick any provider (local Ollama, OpenAI, Claude, z.ai, DeepSeek, "
+            "Groq, Gemini, ...) - it only takes a key.[/dim]",
+            border_style="red"))
+        return
     cfg = load_config()
-    swarm = Swarm(cfg, console)
+    try:
+        swarm = Swarm(cfg, console)
+    except Exception as e:
+        console.print(Panel.fit(
+            f"[red]Could not start the swarm:[/red] {e}\n\n"
+            "[dim]Run `cyberspace setup --force` to reconfigure your AI brain.[/dim]",
+            border_style="red"))
+        return
     console.print(Panel.fit(
         f"[bold magenta]Swarm mode[/bold magenta] ({cfg.provider}/{cfg.model})\n"
         "The Orchestrator delegates to: Recon, Exploit, Ghost, Hardware, Smith, Scribe.\n"
@@ -61,14 +76,28 @@ def run_swarm() -> None:
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
-            swarm.ask(q)
+            try:
+                swarm.ask(q)
+            except ProviderError as e:
+                console.print(Panel.fit(
+                    f"[red]The AI couldn't respond:[/red]\n{e}\n\n"
+                    "[dim]Fix the issue above (e.g. bad API key, wrong model, or the "
+                    "service is down) and try again. Run `cyberspace setup` to "
+                    "reconfigure.[/dim]", border_style="red"))
+            except KeyboardInterrupt:
+                console.print("[dim](interrupted)[/dim]")
 
 
 def run_single_agent() -> None:
     from ..agent.config import is_configured, load_config
     from ..agent.core import Agent
+    from ..agent.llm import ProviderError
     if not is_configured():
-        console.print("[red]Agent not configured.[/red] Run: cyberspace setup"); return
+        console.print(Panel.fit(
+            "[red]No AI brain connected yet.[/red]\n\n"
+            "Run [cyan]cyberspace setup[/cyan] to connect an LLM first.",
+            border_style="red"))
+        return
     cfg = load_config()
     a = Agent(cfg, console=console)
     console.print(Panel.fit(
@@ -83,7 +112,15 @@ def run_single_agent() -> None:
         if q.strip().lower() in ("exit", "quit", "q"):
             break
         if q.strip():
-            a.ask(q)
+            try:
+                a.ask(q)
+            except ProviderError as e:
+                console.print(Panel.fit(
+                    f"[red]The AI couldn't respond:[/red]\n{e}\n\n"
+                    "[dim]Check your API key / model / network. Run `cyberspace setup` "
+                    "to reconfigure.[/dim]", border_style="red"))
+            except KeyboardInterrupt:
+                console.print("[dim](interrupted)[/dim]")
 
 
 def interactive() -> None:

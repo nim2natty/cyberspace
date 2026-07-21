@@ -63,17 +63,31 @@ fi
 ok "tooling install step complete"
 
 # --- cyberspace package ------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-if [[ -f "$ROOT_DIR/pyproject.toml" ]]; then
-  say "detected repo clone - installing cyberspace editable from $ROOT_DIR"
-  cd "$ROOT_DIR"
+# Resolve our location safely. When the script is run via `curl | bash` there is
+# no BASH_SOURCE (and `set -u` would make an empty reference fatal), so default
+# to $0 and, when that's also empty, clone into ./cyberspace in the cwd. This
+# guarantees a predictable install dir so the "next steps" commands always work.
+SCRIPT_SRC="${BASH_SOURCE[0]:-$0}"
+if [[ -n "${SCRIPT_SRC:-}" && -f "${SCRIPT_SRC:-}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SRC}")" && pwd)"
+  ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
 else
-  say "no local clone - installing cyberspace from PyPI"
-  ROOT_DIR="$(mktemp -d)"; cd "$ROOT_DIR"
-  git clone --depth 1 https://github.com/nim2natty/cyberspace . 2>/dev/null || \
-    warn "could not clone - install via: pip install cyberspace"
+  # Piped (curl | bash) or invoked without a file path: clone into ./cyberspace.
+  ROOT_DIR="${PWD}/cyberspace"
 fi
+
+if [[ -f "${ROOT_DIR}/pyproject.toml" ]]; then
+  say "detected repo checkout - installing cyberspace editable from ${ROOT_DIR}"
+else
+  say "no local checkout found - cloning cyberspace into ${ROOT_DIR}"
+  if [[ -d "${ROOT_DIR}/.git" ]]; then
+    say "${ROOT_DIR} already exists - reusing it"
+  else
+    git clone --depth 1 https://github.com/nim2natty/cyberspace "${ROOT_DIR}" \
+      || die "could not clone. Check your network and git, then re-run."
+  fi
+fi
+cd "${ROOT_DIR}" || die "could not enter ${ROOT_DIR}"
 
 python3 -m venv .venv || die "venv creation failed"
 # shellcheck disable=SC1091
@@ -87,14 +101,15 @@ ok "cyberspace installed"
 # --- next steps -------------------------------------------------------------
 cat <<EOF
 
-${green}All set.${nc} Next steps:
+${green}All set.${nc} cyberspace is installed in: ${ROOT_DIR}
 
-  1) source venv:       ${cyan}source .venv/bin/activate${nc}
-  2) configure agent:   ${cyan}cyberspace setup${nc}        ${yellow}<- do this FIRST${nc}
-  3) check everything:  ${cyan}cyberspace doctor${nc}
-  4) launch a platform: ${cyan}cyberspace iceberg profile new win --persona win-chrome${nc}
-                        ${cyan}cyberspace iceberg browse -p win --selftest${nc}
-  5) one AI for all:    ${cyan}cyberspace dashboard${nc}    (CyberPunked)
+Next steps (run these in a normal terminal, not the installer):
+
+  1) go to the install dir:  ${cyan}cd ${ROOT_DIR}${nc}
+  2) activate the python env: ${cyan}source .venv/bin/activate${nc}
+  3) configure your AI brain: ${cyan}cyberspace setup${nc}      ${yellow}<-- do this FIRST${nc}
+  4) verify everything:       ${cyan}cyberspace doctor${nc}
+  5) launch the team:         ${cyan}cyberspace swarm${nc}
 
 Docs: https://github.com/nim2natty/cyberspace
 EOF

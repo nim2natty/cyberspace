@@ -154,3 +154,107 @@ def get_prompts(project_name: str) -> list[dict]:
 def _sanitize(name: str) -> str:
     """Make a name safe for a folder: lowercase, spaces -> hyphens, strip special chars."""
     return "".join(c if c.isalnum() or c in " -_" else "" for c in name).strip().lower().replace(" ", "-")
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy search: find projects and saved chats by keyword.
+# Used so the user can just type anything and the AI finds the right project.
+# ---------------------------------------------------------------------------
+def search(query: str, limit: int = 10) -> list[dict]:
+    """Search across all project names, descriptions, tags, AND saved prompt
+    content. Returns ranked results:
+
+      [{"type": "project", "name": ..., "matched": "name"/"description"/"prompt",
+        "snippet": ..., "score": N}, ...]
+
+    The caller (the AI agent) can use this to find and open the right project
+    when the user mentions it without knowing the exact name.
+    """
+    ensure_dirs()
+    q = (query or "").lower().strip()
+    if not q:
+        return []
+    results: list[dict] = []
+    words = q.split()
+
+    for pdir in sorted(PROJECTS_DIR.iterdir()) if PROJECTS_DIR.exists() else []:
+        if not pdir.is_dir():
+            continue
+        meta_file = pdir / "project.json"
+        meta = {}
+        if meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text())
+            except Exception:
+                pass
+        name = meta.get("name", pdir.name)
+        desc = meta.get("description", "")
+        tags = " ".join(meta.get("tags", []))
+        name_low = name.lower()
+        desc_low = desc.lower()
+        tags_low = tags.lower()
+
+        # Score the project name/description/tags
+        score = 0
+        matched_field = ""
+        if q in name_low:
+            score += 100
+            matched_field = "name"
+        if q in desc_low:
+            score += 50
+            matched_field = matched_field or "description"
+        for w in words:
+            if w in name_low:
+                score += 20
+            if w in desc_low or w in tags_low:
+                score += 10
+        if score > 0:
+            results.append({"type": "project", "name": name, "matched": matched_field or "keyword",
+                            "snippet": desc[:120] or name, "score": score, "prompt_count": _count_prompts(pdir)})
+
+        # Search saved prompts for keyword matches
+        pfile = pdir / "prompts.jsonl"
+        if pfile.exists():
+            for line in pfile.read_text().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    continue
+                prompt_text = entry.get("prompt", "").lower()
+                prompt_score = 0
+                if q in prompt_text:
+                    prompt_score = 60
+                else:
+                    for w in words:
+                        if w in prompt_text:
+                            prompt_score += 5
+                if prompt_score > 0:
+                    results.append({
+                        "type": "chat", "name": name, "matched": "prompt",
+                        "snippet": entry.get("prompt", "")[:150],
+                        "ts": entry.get("ts", "")[:19], "score": prompt_score,
+                    })
+
+    results.sort(key=lambda r: r["score"], reverse=True)
+    return results[:limit]
+
+
+def _count_prompts(pdir: Path) -> int:
+    pfile = pdir / "prompts.jsonl"
+    if not pfile.exists():
+        return 0
+    return sum(1 for line in pfile.read_text().splitlines() if line.strip())
+
+
+def find_and_open(query: str) -> Optional[str]:
+    """Search for a project by keyword. If a match is found, set it active and
+    return its name. Returns None if no match. Used by the AI when the user
+    mentions a project topic without using an exact command."""
+    results = search(query, limit=1)
+    if results:
+        name = results[0]["name"]
+        set_active(name)
+        return name
+    return None

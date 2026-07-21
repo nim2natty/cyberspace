@@ -107,7 +107,7 @@ def team_brief() -> str:
 
 ORCHESTRATOR_SYSTEM = """You are the ORCHESTRATOR, the mission commander of the cyberspace agent swarm.
 
-You lead a team of SPECIALIZED sub-agents. You do NOT run tools yourself - you DELEGATE to the right specialist. Your single tool is `swarm.delegate`.
+You lead a team of SPECIALIZED sub-agents. You do NOT run tools yourself - you DELEGATE to the right specialist.
 
 ## Your team
 - **Recon** (📶): network reconnaissance. Call for: scanning, enumeration, mapping attack surface.
@@ -117,10 +117,22 @@ You lead a team of SPECIALIZED sub-agents. You do NOT run tools yourself - you D
 - **Smith** (🤖): AI engineering. Call for: dataset selection, custom-model training, local serving.
 - **Scribe** (📝): reporting. Call for: when engagement is done and you need a deliverable.
 
+## You choose the attack vector
+When the user describes a goal in plain language (e.g. "check if my router is
+vulnerable" or "scan that web server"), DO NOT ask them which tool or agent to
+use. Figure out the best approach yourself and delegate to the right agent. Run it.
+Explain the results in plain language.
+
 ## How to operate
 1. Understand the objective. 2. Break it into phases and delegate each to the RIGHT specialist.
 3. Chain their outputs (Recon finds web app -> Exploit tests it -> Scribe reports).
 4. Stay within authorized scope. 5. When done, delegate to Scribe for the report.
+
+## You manage projects
+If the user mentions a topic that matches an existing project (e.g. "open my chicago
+work"), call project.search to find it. If one matches, call project.open to switch
+to it. If no project exists, call project.create with a sensible name. Prompts are
+auto-saved to the active project.
 """
 
 
@@ -203,8 +215,10 @@ class Swarm:
     def ask(self, prompt: str) -> str:
         self.messages.append({"role": "user", "content": prompt})
         dt = self._delegate_tool()
+        from .agent.core import _project_tools
+        all_tools = [dt] + _project_tools()
         for _ in range(self.max_iterations):
-            resp = self.provider.chat(self.messages, [dt])
+            resp = self.provider.chat(self.messages, all_tools)
             m = {"role": "assistant", "content": resp.text}
             if resp.tool_calls:
                 m["tool_calls"] = [{"id": f"call_{i}", "type": "function",
@@ -220,8 +234,18 @@ class Swarm:
                 if call.name == "swarm.delegate":
                     result = self.delegate(call.arguments.get("agent_name", ""),
                                            call.arguments.get("task", ""))
+                elif call.name == "project.search":
+                    from .agent.core import _project_search
+                    result = _project_search(call.arguments.get("query", ""))
+                elif call.name == "project.open":
+                    from .agent.core import _project_open
+                    result = _project_open(call.arguments.get("query", ""))
+                elif call.name == "project.create":
+                    from .agent.core import _project_create
+                    result = _project_create(call.arguments.get("name", ""),
+                                             call.arguments.get("description", ""))
                 else:
-                    result = "ERROR: orchestrator can only use swarm.delegate"
+                    result = "ERROR: orchestrator can only use swarm.delegate + project tools"
                 self.messages.append({"role": "tool", "name": call.name, "content": result})
         self.console.print("[yellow](orchestrator reached delegation limit)[/yellow]")
         return ""

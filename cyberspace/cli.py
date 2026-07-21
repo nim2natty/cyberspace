@@ -284,6 +284,49 @@ def project_status():
         console.print("[dim]No active project. Create one: cyberspace project create \"my project\"[/dim]")
 
 
+@project_app.command("search")
+def project_search(query: str = typer.Argument(..., help="keyword to search for in project names and saved chats")):
+    """Search all projects and saved chats by keyword."""
+    from . import projects
+    results = projects.search(query)
+    if not results:
+        console.print(f"[yellow]No results for '{query}'.[/yellow]")
+        return
+    console.print(f"[bold]Found {len(results)} match(es) for '{query}':[/bold]\n")
+    for r in results:
+        rtype = r.get("type", "")
+        icon = "📁" if rtype == "project" else "💬"
+        console.print(f"{icon} [bold]{r.get('name', '')}[/bold] [dim]({r.get('matched', '')})[/dim]")
+        snippet = r.get("snippet", "")
+        if snippet:
+            console.print(f"   [dim]{snippet[:100]}[/dim]")
+        if r.get("ts"):
+            console.print(f"   [dim]saved: {r['ts']}[/dim]")
+        console.print()
+
+
+@app.command()
+def providers():
+    """List every LLM provider cyberspace can connect to.
+
+    Shows the catalog of agentic LLMs (local + cloud) with their API dialect,
+    where to get a key, and suggested models. Use `cyberspace setup` to connect one.
+    """
+    from .agent.providers import all_specs
+    from .agent.config import load_config
+    cfg = load_config()
+    active = cfg.provider if cfg else None
+    t = Table("#", "provider", "style", "key?", "suggested models", "")
+    for i, spec in enumerate(all_specs(), 1):
+        style = {"ollama": "ollama", "openai": "openai-compat", "anthropic": "anthropic"}.get(spec.api_style, spec.api_style)
+        keycol = "no" if not spec.needs_key else "yes"
+        models = ", ".join(spec.models[:3]) + (" ..." if len(spec.models) > 3 else "")
+        mark = "[green]<- active[/green]" if active == spec.key else ""
+        t.add_row(str(i), spec.display, style, keycol, models, mark)
+    console.print(t)
+    console.print("\n[dim]Connect one with: cyberspace setup[/dim]")
+
+
 @app.command()
 def tools():
     """List all agent tools across all platforms."""

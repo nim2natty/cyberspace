@@ -51,9 +51,11 @@ team lead. You give it a goal, and it hands out the work.
 cyberspace needs **Python 3.10 or newer**. Pick your operating system below and
 copy-paste the commands into a terminal.
 
-> **First run?** After installing, run `cyberspace setup` once to pick your AI
-> "brain" (a free local model via [Ollama](https://ollama.com), or a paid cloud
-> one like OpenAI), then start the team with `cyberspace swarm`.
+> **First run?** After installing, run `cyberspace setup` once to connect your AI
+> "brain". You can use **any LLM** — a free local model via [Ollama](https://ollama.com),
+> or a cloud one (OpenAI, Claude, **z.ai**, DeepSeek, Groq, Gemini, OpenRouter,
+> and more — see [Connect any LLM](#connect-any-llm)). Then start the team with
+> `cyberspace swarm`.
 
 ---
 
@@ -271,6 +273,60 @@ cyberspace doctor        # green check marks = ready to go
 
 If `doctor` shows anything missing, the install commands above will fix it.
 
+---
+
+## Connect any LLM
+
+cyberspace isn't locked to one AI provider. Run `cyberspace setup` and pick from
+the built-in catalog — you only ever type a number + your API key. See them all
+without configuring anything:
+
+```bash
+cyberspace providers        # list every LLM you can connect
+```
+
+| # | Provider | Style | Key? | Best for |
+|---|---|---|---|---|
+| 1 | **Ollama** | native | no | local, free, offline (great for the Pi) |
+| 2 | **OpenAI** (GPT) | openai-compat | yes | strong, reliable tool-calling |
+| 3 | **Anthropic** (Claude) | native | yes | excellent reasoning |
+| 4 | **z.ai** (GLM) | openai-compat | yes | Zhipu GLM models (glm-4.6) |
+| 5 | **DeepSeek** | openai-compat | yes | great-value reasoning models |
+| 6 | **Groq** | openai-compat | yes | extremely fast inference |
+| 7 | **OpenRouter** | openai-compat | yes | one key → OpenAI/Claude/Gemini/Llama/free |
+| 8 | **Together AI** | openai-compat | yes | hosted open models |
+| 9 | **Mistral** | openai-compat | yes | — |
+| 10 | **xAI** (Grok) | openai-compat | yes | — |
+| 11 | **Google Gemini** | openai-compat | yes | — |
+| 12 | **Perplexity** | openai-compat | yes | models with live web access |
+| 13–14 | LM Studio / vLLM | openai-compat | no | local servers |
+| 15 | **RoboDaddy** | openai-compat | no | a model *you* trained (see below) |
+| 16 | **Custom** | openai-compat | optional | any OpenAI-compatible endpoint |
+
+**Connecting a key takes one line.** If your key is already in an environment
+variable (`OPENAI_API_KEY`, `ZAI_API_KEY`, `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, …),
+`cyberspace setup` finds it automatically — you don't even type it.
+
+```bash
+cyberspace setup            # pick a provider + paste your key
+cyberspace setup --force    # reconfigure / switch providers later
+cyberspace swarm            # go
+```
+
+### Use a model you trained with RoboDaddy
+
+Train a model with RoboDaddy, serve it locally, then connect it as your AI brain:
+
+```bash
+cyberspace robodaddy plan "offensive pent security"
+cyberspace robodaddy train offensive_pentest --provider dry-run   # free dry-run
+cyberspace robodaddy serve offensive_pentest-d1 --target ollama    # serve it
+cyberspace setup            # pick option 15 (RoboDaddy) and choose your model
+# - or -
+cyberspace robodaddy use offensive_pentest-d1                      # set it directly
+```
+
+---
 
 ## The easiest way: let the AI do everything
 

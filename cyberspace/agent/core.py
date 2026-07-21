@@ -27,11 +27,86 @@ DEFAULT_SYSTEM = (
 )
 
 
+def _project_search(query: str = ""):
+    """Agent tool: search projects + saved chats by keyword."""
+    from ..projects import search
+    if not query.strip():
+        return "query required"
+    results = search(query)
+    if not results:
+        return f"no projects or chats found matching '{query}'"
+    return "\n".join(
+        f"- [{r['type']}] {r['name']}: {r.get('snippet','')[:80]} ({r.get('matched','')})"
+        for r in results)
+
+
+def _project_open(query: str = ""):
+    """Agent tool: find a project by keyword and make it active."""
+    from ..projects import find_and_open
+    if not query.strip():
+        return "query required"
+    name = find_and_open(query)
+    if name:
+        return f"opened project '{name}'. New prompts will be saved there."
+    return f"no project found matching '{query}'. Create one with project_create."
+
+
+def _project_create(name: str = "", description: str = ""):
+    """Agent tool: create a new project and make it active."""
+    from ..projects import create
+    if not name.strip():
+        return "name required"
+    create(name, description=description)
+    return f"created and activated project '{name}'."
+
+
+def _project_tools() -> list[Tool]:
+    """Return project-management tools so the agent can manage projects."""
+    return [
+        Tool(name="project.search",
+             description="Search saved projects and chat histories by keyword. Use when the user "
+                         "mentions a topic that might be an existing project.",
+             parameters={"type": "object", "properties": {"query": {"type": "string"}},
+                         "required": ["query"]},
+             fn=_project_search),
+        Tool(name="project.open",
+             description="Find a project by keyword and set it as active (so prompts get saved there).",
+             parameters={"type": "object", "properties": {"query": {"type": "string"}},
+                         "required": ["query"]},
+             fn=_project_open),
+        Tool(name="project.create",
+             description="Create a new named project and make it active.",
+             parameters={"type": "object",
+                         "properties": {"name": {"type": "string"},
+                                        "description": {"type": "string", "default": ""}},
+                         "required": ["name"]},
+             fn=_project_create),
+    ]
+
+
 def build_system_prompt(base: str = "") -> str:
     """Inject the learned operator profile (memory) into the system prompt."""
     try:
         from ..memory import context_block
-        return (base or DEFAULT_SYSTEM) + context_block()
+        from ..projects import get_active, search as project_search
+        prompt = (base or DEFAULT_SYSTEM) + context_block()
+        # Tell the agent about the active project and that it can auto-switch.
+        active = get_active()
+        if active:
+            prompt += f"\n\nActive project: '{active}'. Prompts are being saved there."
+        prompt += (
+            "\n\n## You choose the attack vector\n"
+            "When the user describes a goal (e.g. 'check if my router is vulnerable' or "
+            "'scan that server'), DO NOT ask them which tool to use. Pick the best tool "
+            "or chain pipeline yourself based on what they described. Run it. Explain "
+            "the results in plain language.\n\n"
+            "## You manage projects\n"
+            "If the user mentions a topic that matches an existing project (e.g. 'open "
+            "my chicago work'), use the project_search tool to find it and auto-switch "
+            "to it. If no project matches, create one automatically with a sensible name.\n"
+            "You also have project_search, project_open, and project_create tools."
+        )
+        return prompt
     except Exception:
         return base or DEFAULT_SYSTEM
 
@@ -48,7 +123,7 @@ class Agent:
 
     @property
     def tools(self) -> list[Tool]:
-        return self.registry.all()
+        return self.registry.all() + _project_tools()
 
     def _execute(self, call) -> str:
         tool = self.registry.get(call.name)
