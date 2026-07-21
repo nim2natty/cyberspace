@@ -15,7 +15,7 @@ from rich.table import Table
 from ...modules.base import Module, ModuleInfo, Tool, ToolRegistry
 from .profiles import FingerprintProfile
 from .personas import PERSONAS
-from . import opsec
+from . import opsec, privacy
 
 console = Console()
 
@@ -45,10 +45,10 @@ def _tool_new_profile(name: str = "auto", persona: str = "win-chrome"):
     return f"created IceBerg profile '{name}' from persona '{persona}'"
 
 
-def _tool_secure_find(query: str = "", mode: str = "bright", preset: str = "general"):
-    """Agent-callable: run the IceBerg :: secure AI find pipeline (bright/dark)."""
+def _tool_find(query: str = "", mode: str = "bright", preset: str = "general"):
+    """Agent-callable: run the Iceberg AI find pipeline (bright/dark)."""
     if not query:
-        return "query required (e.g. iceberg.secure_find query='ransomware group X', mode='dark')"
+        return "query required (e.g. iceberg.find query='ransomware group X', mode='dark')"
     from .secure.pipeline import run_find
     from .secure.security import SecurityConfig
     sec = SecurityConfig.load()
@@ -60,8 +60,8 @@ def _tool_secure_find(query: str = "", mode: str = "bright", preset: str = "gene
     return head + (inv.summary or "(no summary)")
 
 
-def _tool_secure_status(**_):
-    """Agent-callable: report IceBerg :: secure mode + Tor reachability."""
+def _tool_status(**_):
+    """Agent-callable: report Iceberg mode and Tor reachability."""
     from .secure.tor import tor_available
     from .secure.security import SecurityConfig, dark_settings
     sec = SecurityConfig.load()
@@ -72,13 +72,17 @@ def _tool_secure_status(**_):
     return "\n".join(lines)
 
 
+def _tool_privacy_audit(**_):
+    return privacy.audit_text()
+
+
 class IceBergModule(Module):
     def describe(self) -> ModuleInfo:
         return ModuleInfo(
             name="iceberg", display_name="IceBerg", version="0.1.0",
             emoji="\U0001f9ca",
-            description="OPSEC browser + system opsec + 'e' AI find (bright/dark, Tor).",
-            requires_tools=["playwright", "macchanger", "tor", "proxychains"],
+            description="Full privacy posture: audit, Mullvad VPN, private DNS, Tor, and browser.",
+            requires_tools=["playwright", "mullvad", "tor"],
         )
 
     def register_tools(self, registry: ToolRegistry) -> None:
@@ -102,10 +106,10 @@ class IceBergModule(Module):
                                        "persona": {"type": "string", "default": "win-chrome"}},
                         "required": ["name"]}, fn=_tool_new_profile))
         registry.register(Tool(
-            name="iceberg.secure_find",
+            name="iceberg.find",
             description="AI-powered OSINT find: refine a query, search clearnet (bright) or "
                         "Tor onion engines (dark), filter, scrape, and summarize. "
-                        "mode='dark' requires Tor. Use iceberg.secure_status first.",
+                         "mode='dark' requires Tor. Use iceberg.status first.",
             parameters={"type": "object",
                         "properties": {"query": {"type": "string"},
                                        "mode": {"type": "string", "enum": ["bright", "dark"],
@@ -115,14 +119,18 @@ class IceBergModule(Module):
                                                            "personal_identity",
                                                            "corporate_espionage"],
                                                   "default": "general"}},
-                        "required": ["query"]}, fn=_tool_secure_find))
+                        "required": ["query"]}, fn=_tool_find))
         registry.register(Tool(
-            name="iceberg.secure_status",
-            description="Report IceBerg :: secure mode and whether the Tor SOCKS proxy is reachable.",
-            parameters={"type": "object", "properties": {}}, fn=_tool_secure_status))
+            name="iceberg.status",
+            description="Report Iceberg mode and whether the Tor SOCKS proxy is reachable.",
+            parameters={"type": "object", "properties": {}}, fn=_tool_status))
+        registry.register(Tool(
+            name="iceberg.privacy_audit",
+            description="Passively audit detectable system privacy weaknesses and give a solution for each.",
+            parameters={"type": "object", "properties": {}}, fn=_tool_privacy_audit))
 
     def build_cli(self) -> typer.Typer:
-        app = typer.Typer(help="IceBerg: OPSEC browser + system opsec.")
+        app = typer.Typer(help="Iceberg: complete system, network, DNS, Tor, and browser privacy.")
         prof_app = typer.Typer(help="Manage fingerprint profiles.")
         app.add_typer(prof_app, name="profile")
 
@@ -138,6 +146,15 @@ class IceBergModule(Module):
                 console.print(f"[red]{e}[/red]"); raise typer.Exit(1)
             from .browser import launch
             launch(p, url=url, headless=headless, selftest=selftest, console=console)
+
+        @app.command("browser-install")
+        def browser_install():
+            """Download the Chromium engine used by Iceberg for the current user."""
+            from .browser import install_engine
+            ok, message = install_engine()
+            console.print(("[green]" if ok else "[red]") + message)
+            if not ok:
+                raise typer.Exit(1)
 
         @prof_app.command("new")
         def prof_new(name: str = typer.Argument(...),
@@ -174,7 +191,45 @@ class IceBergModule(Module):
 
         @app.command("check")
         def check():
-            console.print(opsec.selfcheck())
+            """Audit detectable privacy weaknesses and show a solution for every finding."""
+            console.print(privacy.audit_text())
+
+        @app.command("status")
+        def status():
+            """Show the system privacy, Mullvad VPN, DNS, and Tor status."""
+            console.print(privacy.audit_text())
+
+        vpn_app = typer.Typer(help="Inspect and control the installed Mullvad VPN app.")
+        app.add_typer(vpn_app, name="vpn")
+
+        @vpn_app.command("status")
+        def vpn_status():
+            console.print(privacy.mullvad_status())
+
+        def vpn_command(action: str):
+            def command() -> None:
+                console.print(privacy.mullvad_action(action))
+            command.__name__ = action.replace("-", "_")
+            return command
+
+        for action in ("connect", "disconnect", "lockdown-on", "lockdown-off",
+                       "autoconnect-on", "autoconnect-off"):
+            vpn_app.command(action)(vpn_command(action))
+
+        dns_app = typer.Typer(help="Inspect DNS and configure Mullvad's private filtered DNS.")
+        app.add_typer(dns_app, name="dns")
+
+        @dns_app.command("status")
+        def show_dns():
+            console.print(privacy.dns_status())
+
+        @dns_app.command("protect")
+        def protect_dns():
+            console.print(privacy.mullvad_dns(True))
+
+        @dns_app.command("reset")
+        def reset_dns():
+            console.print(privacy.mullvad_dns(False))
 
         # Switch the active cyberbot LLM model/provider (used by all platforms).
         model_app = typer.Typer(help="Switch the cyberbot LLM model / provider.")
@@ -246,9 +301,13 @@ class IceBergModule(Module):
             save_config(cfg)
             console.print(f"[green]provider set:[/green] {cfg.provider}/{cfg.model}")
 
-        # IceBerg :: secure  - AI-powered find & browse (bright/dark), incl. the GUI.
+        # Formerly the separate "e"/"secure" surface; now first-class Iceberg commands.
         from .secure.cli import build_secure_cli
-        app.add_typer(build_secure_cli(console), name="secure")
+        secure_cli = build_secure_cli(console)
+        merged_names = {"config", "find", "private-browse", "gui"}
+        for command in secure_cli.registered_commands:
+            if command.name in merged_names:
+                app.registered_commands.append(command)
 
         return app
 

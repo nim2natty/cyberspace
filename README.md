@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white">
+  <img alt="Standalone" src="https://img.shields.io/badge/install-standalone_executable-blue">
   <img alt="License" src="https://img.shields.io/github/license/nim2natty/cyberspace?color=green">
   <img alt="Stars" src="https://img.shields.io/github/stars/nim2natty/cyberspace?style=social">
 </p>
@@ -60,238 +60,57 @@ without mixing separate engagements.
 ### Visible execution and resilient models
 
 The CLI shows the Kill Chain stage, delegated work, tool calls, result progress, and
-model failover. Setup queries live provider model lists when available and still allows
-an exact custom ID. If a model rejects a request, Cyberspace preserves the transcript,
-visibly tries another model from the same provider, and continues. Credential, quota,
-and network failures are reported because switching models cannot repair them.
+model failover. Credential, quota, and network failures remain visible.
 
 ## Installation
 
-cyberspace needs **Python 3.10 or newer**. Pick your operating system below and
-copy-paste the commands into a terminal.
+Cyberspace is distributed as a standalone executable. **Python, pip, cloning, and virtual
+environments are not required.** Each installer detects Intel/ARM, downloads the matching
+GitHub release, verifies its SHA-256 checksum, and adds `cyberspace` to your user PATH.
 
-### Quick start
-
-On macOS, Linux, Raspberry Pi OS, or Windows through WSL, the installer creates a
-private virtual environment and a global launcher for it:
+### macOS, Linux, Raspberry Pi, or WSL
 
 ```bash
-# Install
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
-Open a new terminal, then:
-
-```bash
-cyberspace setup     # connect a local or cloud AI model once
-cyberspace doctor    # check platforms and host tools
-cyberspace           # open the Cyber Kill Chain workspace
-```
-
-### Uninstall
-
-```bash
-cyberspace uninstall
-```
-
-This removes the launcher and private Python environment but keeps projects and settings.
-To remove everything, including the checkout and saved data:
-
-```bash
-cyberspace uninstall --remove-source --purge-data
-```
-
-The `cyberspace` launcher works from any directory and enters the private Python
-environment automatically. You do **not** need to `cd` into the repository or run
-`source .venv/bin/activate`. All subcommands work through the same launcher, for
-example `cyberspace project list` and `cyberspace airbender status`.
-
----
-
-### 🍎 macOS
-
-**Option A — one-line installer (recommended)**
-
-Installs Homebrew if needed, pulls the offensive tools that exist on Mac
-(`nmap`, `sqlmap`, `masscan`), creates a virtual environment, and installs
-cyberspace + the IceBerg browser engine.
-
-Run the [Quick start](#quick-start) installer above, open a new terminal, and type
-`cyberspace`.
-
-**Option B — manual install**
-
-```bash
-# 1. Install Homebrew (if you don't have it):  https://brew.sh
-# 2. Get Python 3.11 + the security tools cyberspace wraps:
-brew install python@3.11 nmap sqlmap masscan git
-
-# 3. Clone the repo and create an isolated Python environment:
-git clone https://github.com/nim2natty/cyberspace.git
-cd cyberspace
-python3 -m venv .venv
-
-# 4. Install cyberspace + the optional web UI + the IceBerg browser engine:
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e ".[ui,gui]"
-.venv/bin/python -m playwright install chromium
-bash installer/install-launcher.sh
-
-# 5. Configure the agent and launch:
-cyberspace setup
-cyberspace
-```
-
-> **Apple Silicon note:** everything above works on both Intel and Apple Silicon
-> Macs. The IceBerg browser engine (`playwright install chromium`) downloads a
-> native build automatically.
-
----
-
-### 🪟 Windows
-
-**Option A — WSL2 (recommended, full feature set)**
-
-The offensive toolchain (Kali tools, Tor, raw-socket WiFi) runs best on Linux,
-so on Windows the easiest path is the Windows Subsystem for Linux.
+### Windows (PowerShell)
 
 ```powershell
-# 1. In PowerShell (Run as Administrator), install WSL + Ubuntu:
-wsl --install -d Ubuntu
-# Restart your PC when prompted, then open the "Ubuntu" app and finish setup.
+irm https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.ps1 | iex
 ```
 
-Inside the Ubuntu terminal:
+Open a new terminal, then run:
 
 ```bash
-# 2. One-line installer (installs Python, tools, and cyberspace):
-curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
-
-# 3. Configure and open from any directory (the venv is automatic):
-cyberspace setup
-cyberspace
+cyberspace setup                    # connect an AI once
+cyberspace doctor                   # inspect optional host tools
+cyberspace iceberg browser-install # download Iceberg's Chromium engine once
+cyberspace                          # open the workspace
 ```
 
-**Option B — native Windows (Python only, no Linux-only tools)**
+Cloud API keys and Tor control credentials are stored in macOS Keychain, Windows
+Credential Locker, or Linux Secret Service—not in JSON files. On headless Linux without
+a native secret service, set the provider environment variable (such as
+`OPENAI_API_KEY`) instead; Cyberspace will not create a plaintext fallback.
 
-Best if you only want the agent/AI features and the IceBerg browser.
+Mullvad, Tor, nmap, and other utilities remain optional host applications. Install only
+the capabilities you need from their official source or operating-system package manager;
+`cyberspace doctor` reports what is available.
 
-```powershell
-# 1. Install Python 3.10+ from https://python.org  (check "Add Python to PATH")
-# 2. Install Git from https://git-scm.com/download/win
+### Upgrade and uninstall
 
-# 3. In PowerShell or Command Prompt:
-git clone https://github.com/nim2natty/cyberspace.git
-cd cyberspace
-py -m venv .venv
-.venv\Scripts\activate
-
-# 4. Install cyberspace + the IceBerg browser engine:
-py -m pip install --upgrade pip
-py -m pip install -e ".[ui,gui]"
-py -m playwright install chromium
-
-# 5. Configure the agent and launch:
-cyberspace setup
-cyberspace
-```
-
-> The automatic global launcher is currently for macOS/Linux shells, including WSL.
-> On native Windows, activate `.venv\Scripts\activate` before using `cyberspace`, or
-> invoke `.venv\Scripts\cyberspace.exe` directly.
-
-> **Native Windows limitations:** the offensive tool wrappers (nmap, sqlmap,
-> Metasploit, WiFi attacks, raw serial) expect a Linux environment. For the full
-> toolkit use Option A (WSL2) or Docker below.
-
----
-
-### 🐧 Linux
-
-**Option A — one-line installer (Debian / Ubuntu / Kali / Fedora)**
-
-Detects your distro, installs Python + the offensive tools via `apt` or `dnf`,
-creates a virtual environment, and installs cyberspace.
-
-Run the [Quick start](#quick-start) installer above, open a new terminal, and type
-`cyberspace`.
-
-**Option B — manual install (any distro with Python 3.10+)**
+Run the same installer again to replace the executable with the latest verified release.
 
 ```bash
-# 1. (Debian/Ubuntu/Kali) install Python + the tools cyberspace wraps:
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip python3-venv git \
-     nmap masscan sqlmap gobuster whatweb macchanger tor proxychains4 seclists
-
-# 1-alt. (Fedora) use dnf:
-sudo dnf install -y python3 python3-pip python3-virtualenv git nmap sqlmap masscan
-
-# 2. Clone and create an isolated environment:
-git clone https://github.com/nim2natty/cyberspace.git
-cd cyberspace
-python3 -m venv .venv
-
-# 3. Install cyberspace + the IceBerg browser engine:
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e ".[ui,gui]"
-.venv/bin/python -m playwright install chromium
-bash installer/install-launcher.sh
-
-# 4. Configure the agent and launch:
-cyberspace setup
-cyberspace
+cyberspace uninstall              # keep settings and projects
+cyberspace uninstall --purge-data # remove settings and projects too
 ```
 
----
+### Developers only
 
-### 🐳 Docker (macOS, Windows, Linux — same commands everywhere)
-
-The Docker image is built on Kali Linux and ships every offensive tool
-cyberspace can drive. It runs identically on any OS that has Docker.
-
-```bash
-# 1. Build the image (from a clone of the repo):
-git clone https://github.com/nim2natty/cyberspace.git
-cd cyberspace
-docker build -t cyberspace -f installer/docker/Dockerfile .
-
-# 2. Run the dashboard (persists your config/data to a named volume):
-docker run -it --rm -v cyberspace-data:/data cyberspace
-
-# 3. Configure the agent (first time only):
-docker run -it --rm -v cyberspace-data:/data cyberspace setup
-
-# 4. Open the Cyber Kill Chain workspace:
-docker run -it --rm -v cyberspace-data:/data cyberspace
-```
-
-> **Exposing hardware in Docker:** for the StickEm serial devices add
-> `--device /dev/ttyUSB0`, and for a visible IceBerg browser on a Linux host add
-> `-e DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix`.
-
----
-
-### 🍓 Raspberry Pi / cyberdeck (from source)
-
-For a headless Raspberry Pi 5 cyberdeck, build from source directly on the
-device (a prebuilt image helper lives in
-[`installer/rpi-build/`](installer/rpi-build/)):
-
-```bash
-# On the Pi (Debian/Ubuntu-based):
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip python3-venv git nmap
-
-git clone https://github.com/nim2natty/cyberspace.git
-cd cyberspace
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e .
-bash installer/install-launcher.sh
-cyberspace setup        # pick a local model (e.g. Ollama) — works offline
-cyberspace
-```
+Source contributors can use their preferred Python development tooling. End users should
+always use the standalone installers above.
 
 ---
 
@@ -302,23 +121,11 @@ cyberspace --version     # should print the installed version
 cyberspace doctor        # green check marks = ready to go
 ```
 
-### Upgrade or repair an existing installation
+If upgrading from an old source installation, run the standalone installer once, open a
+new terminal, and remove the old checkout after confirming `cyberspace --version` works.
 
-If an older checkout still requires venv activation, update it and install the launcher
-once:
-
-```bash
-cd ~/cyberspace                    # use your actual checkout path
-git pull --ff-only
-.venv/bin/pip install -e .
-bash installer/install-launcher.sh
-```
-
-After that, opening a new terminal and typing `cyberspace` starts the program directly.
-If the shell still remembers an old command location, run `hash -r` (bash) or `rehash`
-(zsh), or simply open another terminal.
-
-If `doctor` shows anything missing, the install commands above will fix it.
+Advanced image builders can use [`installer/docker/Dockerfile`](installer/docker/Dockerfile)
+or [`installer/rpi-build/`](installer/rpi-build/); neither is required for normal use.
 
 ---
 
@@ -532,26 +339,33 @@ cyberspace shadowdragon run "wpscan" "--url http://10.10.10.5"
 
 ---
 
-### 3. IceBerg 🧊 — staying hidden and searching the web
+### 3. Iceberg 🧊 — whole-device privacy
 
-IceBerg has two sides: a privacy browser that hides your identity, and an AI search
-tool that can search the regular web (brightside) or the dark web (darkside).
+Iceberg is one privacy platform: passive system vulnerability checks with a solution for
+every finding, Mullvad VPN and filtered DNS controls, Tor search/browsing, and hardened
+browser profiles. Audits cover detectable supported checks and cannot guarantee that every
+possible vulnerability was found.
 
 ```bash
-# STEP 1: Check if Tor (the anonymity network) is running
-cyberspace iceberg secure status
+# STEP 1: Audit the device and get prioritized solutions
+cyberspace iceberg check
 
-# STEP 2: Set up your security posture (do this BEFORE dark web browsing)
-cyberspace iceberg secure config
+# STEP 2: Connect Mullvad and prevent traffic outside the tunnel
+cyberspace iceberg vpn status
+cyberspace iceberg vpn connect
+cyberspace iceberg vpn lockdown-on
 
-# STEP 3: Search the REGULAR web with AI
-cyberspace iceberg secure find "latest ransomware groups" --mode bright
+# STEP 3: Enable Mullvad's tracker, ad, and malware-blocking DNS
+cyberspace iceberg dns protect
 
-# STEP 4: Search the DARK WEB with AI (needs Tor running)
-cyberspace iceberg secure find "leaked credentials ACME corp" --mode dark
+# STEP 4: Configure and search regular or Tor sources
+cyberspace iceberg config
+cyberspace iceberg find "latest ransomware groups" --mode bright
+cyberspace iceberg find "leaked credentials ACME corp" --mode dark
 
-# STEP 5: Open the graphic interface (web browser at localhost:8501)
-cyberspace iceberg secure gui
+# STEP 5: Open a Tor-routed browser or the graphic interface
+cyberspace iceberg private-browse https://check.torproject.org --mode dark
+cyberspace iceberg gui
 ```
 
 <details>
@@ -755,7 +569,7 @@ cyberspace tools
 |---|---|---|
 | **AirBender** 📶 | Reconnaissance and cross-checked network discovery | `cyberspace airbender local-recon 192.168.1.0/24` |
 | **ShadowDragon** 🐍 | Web and exploit tools | `cyberspace shadowdragon full-assault http://target` |
-| **IceBerg** 🧊 | Privacy browser + web search | `cyberspace iceberg secure find "query" --mode dark` |
+| **Iceberg** 🧊 | System audit + Mullvad VPN + private DNS + Tor + privacy browser | `cyberspace iceberg check` |
 | **StickEm** 🔌 | Hardware (WiFi + router + serial) | `cyberspace stickem hardware` |
 | **RoboDaddy** 🤖 | Custom AI trainer | `cyberspace robodaddy plan "your use case"` |
 

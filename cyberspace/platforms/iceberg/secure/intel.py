@@ -1,4 +1,4 @@
-"""AI intelligence layer for IceBerg :: secure (refine -> filter -> summarize).
+"""Iceberg AI intelligence layer (refine -> filter -> summarize).
 
 Reuses the SINGLE LLM configured for the whole platform (~/.cyberspace/agent.json)
 via cyberspace's existing provider abstraction - no second LLM config needed.

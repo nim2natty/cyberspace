@@ -1,4 +1,4 @@
-"""Verify the IceBerg :: secure tool (AI find / brightside + darkside).
+"""Verify Iceberg AI find and brightside/darkside browsing.
 
 Network, Tor, and the LLM are NOT required here - we validate the data
 catalogs, security-config persistence, prompt coverage, and agent-tool wiring.
@@ -64,16 +64,16 @@ def main():
     assert pathlib.Path(p).exists()
     print("PASS  pipeline: Investigation dataclass + save_investigation")
 
-    # 6) Agent tools registered + e_status callable without Tor.
+    # 6) Agent tools registered + status callable without Tor.
     from cyberspace.modules.registry import discover_and_load
     from cyberspace.modules.base import TOOL_REGISTRY
     discover_and_load()
-    assert TOOL_REGISTRY.get("iceberg.secure_find"), "iceberg.secure_find not registered"
-    status = TOOL_REGISTRY.get("iceberg.secure_status").fn()
+    assert TOOL_REGISTRY.get("iceberg.find"), "iceberg.find not registered"
+    status = TOOL_REGISTRY.get("iceberg.status").fn()
     assert "secure mode" in status and "Tor SOCKS" in status
-    print(f"PASS  agent tools: secure_find + secure_status registered; status callable")
+    print(f"PASS  agent tools: find + status registered; status callable")
 
-    print("\nALL CHECKS PASSED - IceBerg :: secure tool is wired correctly.")
+    print("\nALL CHECKS PASSED - Iceberg is wired correctly.")
 
 
 if __name__ == "__main__":

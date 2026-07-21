@@ -45,7 +45,7 @@ def run(name: str, args: list[str], timeout: int = 300,
         input_text: Optional[str] = None) -> RunResult:
     """Run a host tool by name + args. Returns a RunResult.
 
-    Security: `name` is resolved via PATH (never a path); `args` is a list
+    Security: `name` is resolved via PATH; `args` is a list
     (never a shell string) so there's no shell injection. Callers must validate
     any operator-supplied values before passing them here.
     """

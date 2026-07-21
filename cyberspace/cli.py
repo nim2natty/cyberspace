@@ -373,25 +373,28 @@ def uninstall(
 ):
     """Uninstall cyberspace. Saved projects and configuration are kept by default."""
     import os
+    import sys
     from pathlib import Path
     from rich.prompt import Confirm
     from .config import HOME
     from .uninstall import remove_installation
 
+    standalone = bool(getattr(sys, "frozen", False))
     root = Path(os.environ.get("CYBERSPACE_ROOT", Path(__file__).resolve().parents[1]))
-    launcher = Path(os.environ.get(
-        "CYBERSPACE_LAUNCHER_PATH", Path.home() / ".local" / "bin" / "cyberspace"))
+    launcher = (Path(sys.executable) if standalone else Path(os.environ.get(
+        "CYBERSPACE_LAUNCHER_PATH", Path.home() / ".local" / "bin" / "cyberspace")))
     extras = []
     if remove_source:
         extras.append("source checkout")
     if purge_data:
         extras.append("saved projects/configuration")
-    detail = ", ".join(extras) if extras else "launcher and private Python environment"
+    detail = ", ".join(extras) if extras else "standalone executable"
     if not yes and not Confirm.ask(f"Remove cyberspace ({detail})?", default=False):
         console.print("[dim]Uninstall cancelled.[/dim]")
         return
     for action in remove_installation(root, launcher, HOME,
-                                      remove_source=remove_source, purge_data=purge_data):
+                                      remove_source=remove_source, purge_data=purge_data,
+                                      standalone=standalone):
         console.print(f"[green]✓[/green] {action}")
     if not purge_data:
         console.print(f"[dim]Saved projects and configuration kept at {HOME}[/dim]")

@@ -30,6 +30,20 @@ SEARCH_ENGINES = {
 }
 
 
+def install_engine() -> tuple[bool, str]:
+    """Download Playwright's matching Chromium build for this user."""
+    import subprocess
+    try:
+        from playwright._impl._driver import compute_driver_executable, get_driver_env
+        node, cli = compute_driver_executable()
+        proc = subprocess.run([node, cli, "install", "chromium"], text=True,
+                              capture_output=True, env=get_driver_env(), timeout=900)
+        output = (proc.stdout or proc.stderr).strip()
+        return proc.returncode == 0, output or ("Chromium installed" if proc.returncode == 0 else "install failed")
+    except Exception as exc:
+        return False, f"could not install Chromium: {exc}"
+
+
 class DoH:
     def __init__(self, provider: str = "mullvad"):
         self.endpoint = DOH_PROVIDERS.get(provider, DOH_PROVIDERS["mullvad"])

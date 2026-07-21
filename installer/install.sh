@@ -1,118 +1,47 @@
 #!/usr/bin/env bash
-# cyberspace installer - provisions the platform on top of Linux/macOS.
-#
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
-#   or:  bash installer/install.sh
-#
-# This turns a stock Kali/Debian/Ubuntu (or macOS) box into a cyberspace host:
-#   - installs python deps
-#   - installs the recommended offensive + opsec tools (apt / brew)
-#   - installs the cyberspace package (editable from a clone, or pip from PyPI)
+# Install the latest standalone Cyberspace executable on macOS or Linux.
 set -euo pipefail
 
-cyan='\033[0;36m'; green='\033[0;32m'; yellow='\033[1;33m'; red='\033[0;31m'; nc='\033[0m'
-say() { printf "${cyan}[cyberspace]${nc} %s\n" "$1"; }
-ok()  { printf "${green}[ok]${nc} %s\n" "$1"; }
-warn(){ printf "${yellow}[!]${nc} %s\n" "$1"; }
-die() { printf "${red}[x]${nc} %s\n" "$1"; exit 1; }
+repo="nim2natty/cyberspace"
+version="${CYBERSPACE_VERSION:-latest}"
+bin_dir="${CYBERSPACE_BIN_DIR:-${HOME}/.local/bin}"
+die() { printf '[cyberspace] error: %s\n' "$1" >&2; exit 1; }
+command -v curl >/dev/null 2>&1 || die "curl is required"
 
-say "Welcome to the cyberspace installer."
-say "This script sets up the agentic pentest platform on this machine."
+case "$(uname -s)" in Darwin) os="macos" ;; Linux) os="linux" ;;
+  *) die "unsupported OS; Windows users should run installer/install.ps1" ;; esac
+case "$(uname -m)" in x86_64|amd64) arch="x86_64" ;; arm64|aarch64) arch="arm64" ;;
+  *) die "unsupported CPU architecture: $(uname -m)" ;; esac
 
-# --- OS detection -----------------------------------------------------------
-OS="unknown"; PKGMGR=""
-if [[ "$OSTYPE" == "darwin"* ]]; then OS="macos";
-elif command -v apt-get >/dev/null 2>&1; then OS="debian"; PKGMGR="apt";
-elif command -v dnf >/dev/null 2>&1; then OS="fedora"; PKGMGR="dnf";
-else die "unsupported OS ($OSTYPE). See docs for manual install."; fi
-ok "detected OS: $OS"
-
-install_pkgs_debian() {
-  local pkgs=("$@")
-  sudo apt-get update -qq
-  for p in "${pkgs[@]}"; do
-    if ! dpkg -l "$p" >/dev/null 2>&1; then
-      say "installing $p ..."; sudo apt-get install -y "$p" >/dev/null
-    fi
-  done
-}
-
-# --- Core Python deps -------------------------------------------------------
-say "checking python3..."
-command -v python3 >/dev/null 2>&1 || die "python3 required."
-
-say "installing python deps for cyberspace..."
-if [[ "$OS" == "macos" ]]; then
-  command -v brew >/dev/null 2>&1 || die "Homebrew required on macOS (https://brew.sh)"
-  brew install -q python@3.11 || true
-fi
-
-# --- Offensive + opsec tooling ---------------------------------------------
-TOOLS_DEB=(python3-pip python3-venv git nmap masscan sqlmap gobuster whatweb
-           macchanger tor proxychains-ng seclists)
-TOOLS_BREW=(nmap sqlmap masscan)
-
-if [[ "$OS" == "debian" ]]; then
-  say "installing offensive tooling via apt (this needs sudo)..."
-  install_pkgs_debian "${TOOLS_DEB[@]}" || warn "some apt packages unavailable - continuing"
-elif [[ "$OS" == "macos" ]]; then
-  say "installing offensive tooling via brew..."
-  for p in "${TOOLS_BREW[@]}"; do brew install -q "$p" 2>/dev/null || warn "couldn't install $p via brew"; done
-fi
-ok "tooling install step complete"
-
-# --- cyberspace package ------------------------------------------------------
-# Resolve our location safely. When the script is run via `curl | bash` there is
-# no BASH_SOURCE (and `set -u` would make an empty reference fatal), so default
-# to $0 and, when that's also empty, clone into ./cyberspace in the cwd. This
-# guarantees a predictable install dir so the "next steps" commands always work.
-SCRIPT_SRC="${BASH_SOURCE[0]:-$0}"
-if [[ -n "${SCRIPT_SRC:-}" && -f "${SCRIPT_SRC:-}" ]]; then
-  SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_SRC}")" && pwd)"
-  ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+asset="cyberspace-${os}-${arch}"
+if [[ "${version}" == "latest" ]]; then
+  base="https://github.com/${repo}/releases/latest/download"
 else
-  # Piped (curl | bash) or invoked without a file path: clone into ./cyberspace.
-  ROOT_DIR="${PWD}/cyberspace"
+  base="https://github.com/${repo}/releases/download/${version}"
 fi
-
-if [[ -f "${ROOT_DIR}/pyproject.toml" ]]; then
-  say "detected repo checkout - installing cyberspace editable from ${ROOT_DIR}"
+mkdir -p "${bin_dir}"
+tmp="$(mktemp "${TMPDIR:-/tmp}/cyberspace.XXXXXX")"
+trap 'rm -f "${tmp}" "${tmp}.sha256"' EXIT
+printf '[cyberspace] downloading %s...\n' "${asset}"
+curl -fL --retry 3 "${base}/${asset}" -o "${tmp}" || die "compatible release not found"
+curl -fL --retry 3 "${base}/${asset}.sha256" -o "${tmp}.sha256" || die "checksum missing"
+expected="$(awk '{print $1}' "${tmp}.sha256")"
+if command -v shasum >/dev/null 2>&1; then
+  actual="$(shasum -a 256 "${tmp}" | awk '{print $1}')"
 else
-  say "no local checkout found - cloning cyberspace into ${ROOT_DIR}"
-  if [[ -d "${ROOT_DIR}/.git" ]]; then
-    say "${ROOT_DIR} already exists - reusing it"
-  else
-    git clone --depth 1 https://github.com/nim2natty/cyberspace "${ROOT_DIR}" \
-      || die "could not clone. Check your network and git, then re-run."
-  fi
+  actual="$(sha256sum "${tmp}" | awk '{print $1}')"
 fi
-cd "${ROOT_DIR}" || die "could not enter ${ROOT_DIR}"
+[[ "${actual}" == "${expected}" ]] || die "checksum verification failed"
+chmod 755 "${tmp}" && mv -f "${tmp}" "${bin_dir}/cyberspace"
 
-python3 -m venv .venv || die "venv creation failed"
-# shellcheck disable=SC1091
-source .venv/bin/activate
-pip install --upgrade pip -q
-pip install -e . -q || die "cyberspace pip install failed"
-say "downloading the IceBerg browser engine (chromium)..."
-python -m playwright install chromium -q || warn "playwright chromium install needs network"
-say "installing the global cyberspace launcher..."
-bash "${ROOT_DIR}/installer/install-launcher.sh" "${ROOT_DIR}" \
-  || die "launcher install failed"
-ok "cyberspace installed"
-
-# --- next steps -------------------------------------------------------------
-cat <<EOF
-
-${green}All set.${nc} cyberspace is installed in: ${ROOT_DIR}
-
-The ${cyan}cyberspace${nc} command now starts the virtual environment automatically.
-Open a new terminal if this is the first time ~/.local/bin was added to PATH.
-
-  1) configure your AI brain: ${cyan}cyberspace setup${nc}      ${yellow}<-- do this FIRST${nc}
-  2) verify everything:       ${cyan}cyberspace doctor${nc}
-  3) open the program:         ${cyan}cyberspace${nc}
-
-Docs: https://github.com/nim2natty/cyberspace
-EOF
-say "Done. Happy (legal) hacking."
+case ":${PATH}:" in *":${bin_dir}:"*) ;;
+  *)
+    case "$(basename "${SHELL:-sh}")" in zsh) profile="${HOME}/.zprofile" ;;
+      bash) profile="${HOME}/.bash_profile" ;; *) profile="${HOME}/.profile" ;; esac
+    marker="# cyberspace executable"
+    grep -Fq "${marker}" "${profile}" 2>/dev/null ||
+      printf '\n%s\nexport PATH="%s:$PATH"\n' "${marker}" "${bin_dir}" >>"${profile}"
+    printf '[cyberspace] added %s to PATH; open a new terminal.\n' "${bin_dir}" ;;
+esac
+printf '[cyberspace] installed and verified: %s\n' "${bin_dir}/cyberspace"
+printf 'Next: cyberspace setup && cyberspace doctor\n'

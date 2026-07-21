@@ -1,6 +1,6 @@
-"""Streamlit GUI for IceBerg :: secure  -  the AI-powered find & browse experience.
+"""Streamlit GUI for Iceberg's AI-powered find and browse experience.
 
-Launched by:  cyberspace iceberg secure gui
+Launched by:  cyberspace iceberg gui
 (which runs:  streamlit run <this file>)
 
 This is the graphic interface for the optimal IceBerg browsing experience: pick
@@ -30,11 +30,11 @@ from cyberspace.platforms.iceberg.secure.security import (
 from cyberspace.platforms.iceberg.secure.tor import tor_available
 
 
-st.set_page_config(page_title="IceBerg :: secure", page_icon="🧊", layout="wide")
+st.set_page_config(page_title="Iceberg privacy", page_icon="🧊", layout="wide")
 
 # --- Sidebar: mode + security posture --------------------------------------
 with st.sidebar:
-    st.title("🧊 IceBerg :: secure")
+    st.title("🧊 Iceberg")
     st.caption("AI-powered find & browse  ·  brightside / darkside")
 
     preset_key = st.selectbox(

@@ -169,7 +169,7 @@ def run_wizard(force: bool = False) -> LLMConfig:
         base_url = Prompt.ask("Base URL (OpenAI-compatible /chat/completions base)",
                               default="http://localhost:8000/v1")
         model = Prompt.ask("Model name", default="local-model")
-        api_key = Prompt.ask("API key (visible; blank = none)", password=False, default="")
+        api_key = Prompt.ask("API key (blank = none)", password=True, default="")
     else:
         # Cloud provider from the catalog: env var first, then prompt for the key.
         env_val = os.environ.get(spec.env_key, "") if spec.env_key else ""
@@ -216,10 +216,19 @@ def run_wizard(force: bool = False) -> LLMConfig:
         except Exception as e:  # last-resort: keep it readable
             console.print(f"[yellow]Could not verify the connection: {e}[/yellow]")
 
-    save_config(cfg)
+    try:
+        key_storage = save_config(cfg)
+    except Exception as exc:
+        console.print(Panel.fit(
+            f"[red]The API key was not saved:[/red] {exc}\n\n"
+            "Install/unlock your system credential store, or set the provider's API-key "
+            "environment variable. Cyberspace will not write API keys to plaintext files.",
+            border_style="red"))
+        raise typer.Exit(1)
     console.print(Panel.fit(
         f"[green]AI connected.[/green]\n"
-        f"provider: [bold]{spec.key}[/bold]   model: [bold]{model}[/bold]\n\n"
+        f"provider: [bold]{spec.key}[/bold]   model: [bold]{model}[/bold]\n"
+        f"credentials: [bold]{key_storage}[/bold]\n\n"
         "[dim]Next: `cyberspace swarm` to command the team, or `cyberspace agent` "
         "for a single chat. Tools register automatically.[/dim]",
         border_style="green"))

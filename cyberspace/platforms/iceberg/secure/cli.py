@@ -1,6 +1,6 @@
-"""CLI for the IceBerg :: secure tool (brightside / darkside AI find & browse).
+"""Unified Iceberg find, Tor browsing, and GUI commands.
 
-Exposed as:   cyberspace iceberg secure <command>
+Exposed directly as: cyberspace iceberg <command>
 
   secure config   interactive security wizard (set Tor posture before browsing)
   secure find     headless AI find: refine -> search -> filter -> scrape -> summarize
@@ -32,7 +32,7 @@ def _check_dep(name: str) -> bool:
 
 
 def build_secure_cli(console: Console) -> typer.Typer:
-    app = typer.Typer(help="IceBerg :: secure - AI-powered find & browse (bright/dark).")
+    app = typer.Typer(help="Iceberg AI find and private browsing (bright/dark).")
 
     @app.command("status")
     def status():
@@ -61,7 +61,7 @@ def build_secure_cli(console: Console) -> typer.Typer:
     def config():
         """Configure the security posture. Set BEFORE darkside browsing."""
         console.print(Panel.fit(
-            "[bold cyan]IceBerg :: secure[/bold cyan] - security configuration\n"
+            "[bold cyan]Iceberg[/bold cyan] - browsing security configuration\n"
             "[dim]Brightside = clearnet. Darkside = Tor + hardening. Pick a preset, "
             "then tune. Dark mode changes transport, DNS, and WebRTC posture.[/dim]",
             border_style="cyan"))
@@ -78,7 +78,7 @@ def build_secure_cli(console: Console) -> typer.Typer:
             sec.tor_socks_port = int(Prompt.ask("Tor SOCKS port", default=str(sec.tor_socks_port)))
             sec.tor_control_port = int(Prompt.ask("Tor control port", default=str(sec.tor_control_port)))
             sec.tor_control_password = Prompt.ask("Tor control password (blank=none)",
-                                                   default=sec.tor_control_password or "")
+                                                   password=True, default=sec.tor_control_password or "")
             sec.new_identity_per_session = Confirm.ask(
                 "Request a NEW Tor identity each run?", default=sec.new_identity_per_session)
             sec.doh_provider = Prompt.ask("DoH provider", default=sec.doh_provider,
@@ -115,7 +115,7 @@ def build_secure_cli(console: Console) -> typer.Typer:
             if not tor_available(sec.tor_socks_host, sec.tor_socks_port):
                 console.print(f"[red]Darkside needs Tor at {sec.socks_url()}, which is not "
                               f"running.[/red] Start it, or use --mode bright. "
-                              f"Run 'cyberspace iceberg secure config' first.")
+                              f"Run 'cyberspace iceberg config' first.")
                 raise typer.Exit(1)
             if sec.new_identity_per_session:
                 ok, info = new_identity(sec.tor_control_host, sec.tor_control_port,
@@ -133,11 +133,11 @@ def build_secure_cli(console: Console) -> typer.Typer:
         console.print(inv.summary)
 
     # --- browse (IceBerg browser, Tor-routed for dark) --------------------
-    @app.command("browse")
+    @app.command("private-browse")
     def browse(url: str = typer.Argument(...),
                mode: str = typer.Option("", "--mode", "-m", help="bright|dark"),
                profile: str = typer.Option("", "--profile", "-p")):
-        """Open a URL in the IceBerg anti-detect browser (Tor-routed for darkside)."""
+        """Open a hardened browser with automatic Tor routing in dark mode."""
         from ..profiles import FingerprintProfile
         sec = SecurityConfig.load()
         if mode in ("bright", "dark"):
@@ -145,7 +145,7 @@ def build_secure_cli(console: Console) -> typer.Typer:
         if profile and profile in FingerprintProfile.list_names():
             p = FingerprintProfile.load(profile)
         else:
-            p = FingerprintProfile.from_persona("e-session", "win-chrome")
+            p = FingerprintProfile.from_persona("iceberg-session", "win-chrome")
         if sec.mode == "dark":
             if not tor_available(sec.tor_socks_host, sec.tor_socks_port):
                 console.print(f"[red]Darkside needs Tor at {sec.socks_url()}.[/red]")
@@ -165,7 +165,7 @@ def build_secure_cli(console: Console) -> typer.Typer:
             raise typer.Exit(1)
         gui_file = Path(__file__).resolve().parent / "gui.py"
         console.print(Panel.fit(
-            f"[bold cyan]IceBerg :: secure[/bold cyan] GUI starting at "
+            f"[bold cyan]Iceberg[/bold cyan] GUI starting at "
             f"http://localhost:{port}\n[dim]Ctrl-C to stop.[/dim]", border_style="cyan"))
         subprocess.run([sys.executable, "-m", "streamlit", "run", str(gui_file),
                         "--server.port", str(port), "--server.headless", "true"])

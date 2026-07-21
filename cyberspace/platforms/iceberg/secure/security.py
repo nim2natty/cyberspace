@@ -1,10 +1,10 @@
-"""Security configuration for the IceBerg :: secure tool.
+"""Browsing security configuration for Iceberg.
 
 Darkside (Tor) browsing demands a different OPSEC posture than brightside
 (clearnet). This module stores the user's per-mode security settings and applies
 Tor-specific hardening (new identity per session, DoH, WebRTC lockdown).
 
-Persisted to ~/.cyberspace/modules/iceberg/e/security.json so the wizard only
+Persisted to ~/.cyberspace/modules/iceberg/security.json so the wizard only
 needs to run once.
 """
 from __future__ import annotations
@@ -14,9 +14,37 @@ from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 from ....config import MODULES_DIR, ensure_dirs
+from ....credentials import get_secret, set_secret
 
-E_DIR = MODULES_DIR / "iceberg" / "e"
-SECURITY_FILE = E_DIR / "security.json"
+ICEBERG_DIR = MODULES_DIR / "iceberg"
+LEGACY_E_DIR = ICEBERG_DIR / "e"
+SECURITY_FILE = ICEBERG_DIR / "security.json"
+
+
+def migrate_legacy_state() -> None:
+    """Merge the former `e` state into Iceberg without losing user data."""
+    if not LEGACY_E_DIR.exists():
+        return
+    ICEBERG_DIR.mkdir(parents=True, exist_ok=True)
+    legacy_security = LEGACY_E_DIR / "security.json"
+    if legacy_security.exists() and not SECURITY_FILE.exists():
+        legacy_security.replace(SECURITY_FILE)
+    legacy_investigations = LEGACY_E_DIR / "investigations"
+    investigations = ICEBERG_DIR / "investigations"
+    if legacy_investigations.exists():
+        investigations.mkdir(exist_ok=True)
+        for source in legacy_investigations.iterdir():
+            destination = investigations / source.name
+            if not destination.exists():
+                source.replace(destination)
+        try:
+            legacy_investigations.rmdir()
+        except OSError:
+            pass
+    try:
+        LEGACY_E_DIR.rmdir()
+    except OSError:
+        pass
 
 
 @dataclass
@@ -50,17 +78,32 @@ class SecurityConfig:
     @classmethod
     def load(cls) -> "SecurityConfig":
         ensure_dirs()
+        migrate_legacy_state()
         if not SECURITY_FILE.exists():
             return cls()
         try:
             d = json.loads(SECURITY_FILE.read_text())
-            return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+            legacy_password = d.pop("tor_control_password", "")
+            if legacy_password:
+                set_secret("iceberg:tor-control", legacy_password)
+            cfg = cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
+            cfg.tor_control_password = get_secret("iceberg:tor-control")
+            return cfg
         except Exception:
             return cls()
 
     def save(self) -> None:
-        E_DIR.mkdir(parents=True, exist_ok=True)
-        SECURITY_FILE.write_text(json.dumps(asdict(self), indent=2))
+        ICEBERG_DIR.mkdir(parents=True, exist_ok=True)
+        if self.tor_control_password:
+            set_secret("iceberg:tor-control", self.tor_control_password)
+        data = asdict(self)
+        data.pop("tor_control_password", None)
+        data["tor_control_password_stored"] = bool(self.tor_control_password)
+        SECURITY_FILE.write_text(json.dumps(data, indent=2))
+        try:
+            SECURITY_FILE.chmod(0o600)
+        except OSError:
+            pass
 
 
 # Friendly presets the wizard offers, so a learner doesn't face raw fields.

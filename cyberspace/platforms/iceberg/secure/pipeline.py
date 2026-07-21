@@ -1,4 +1,4 @@
-"""End-to-end AI find pipeline for IceBerg :: secure.
+"""End-to-end AI find pipeline for Iceberg.
 
 run_find() wires the whole thing together with a progress callback so both the
 CLI and the Streamlit GUI can show each stage:
@@ -20,7 +20,7 @@ from .search import get_search_results
 from .security import SecurityConfig
 from .tor import new_identity, tor_available
 
-INVESTIGATIONS_DIR = MODULES_DIR / "iceberg" / "e" / "investigations"
+INVESTIGATIONS_DIR = MODULES_DIR / "iceberg" / "investigations"
 
 EventFn = Callable[[str, str], None]
 
@@ -127,6 +127,8 @@ def run_find(query: str, sec: Optional[SecurityConfig] = None,
 def save_investigation(inv: Investigation) -> str:
     """Persist an investigation to JSON. Returns the file path."""
     ensure_dirs()
+    from .security import migrate_legacy_state
+    migrate_legacy_state()
     INVESTIGATIONS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = INVESTIGATIONS_DIR / f"investigation_{ts}.json"
@@ -142,6 +144,8 @@ def save_investigation(inv: Investigation) -> str:
 
 def list_investigations() -> list[dict]:
     """Return saved investigations, newest first."""
+    from .security import migrate_legacy_state
+    migrate_legacy_state()
     if not INVESTIGATIONS_DIR.exists():
         return []
     out = []

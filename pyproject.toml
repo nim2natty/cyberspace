@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cyberspace"
-version = "0.5.0"
+version = "0.6.0"
 description = "cyberspace - an agentic security lab platform with scoped tool agents"
 readme = "README.md"
 license = { text = "MIT" }
@@ -21,12 +21,16 @@ dependencies = [
     "requests>=2.31",
     "pysocks>=1.7",
     "beautifulsoup4>=4.12",
+    "keyring>=25.0",
+    "SecretStorage>=3.3; sys_platform == 'linux'",
+    "playwright>=1.45",
 ]
 
 [project.optional-dependencies]
 ui = ["textual>=0.60"]
 gui = ["streamlit>=1.30"]
 dev = ["pytest>=8.0"]
+build = ["pyinstaller>=6.0"]
 
 [project.scripts]
 cyberspace = "cyberspace.cli:app"

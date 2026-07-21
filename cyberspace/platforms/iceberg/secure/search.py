@@ -1,4 +1,4 @@
-"""Search the IceBerg :: secure engines (brightside clearnet or darkside onion).
+"""Search Iceberg engines (brightside clearnet or darkside onion).
 
 Adapted from Robin's search.py (MIT, apurvsinghgautam): build the query URL for
 each engine, fetch via the right transport (direct for bright, Tor SOCKS5h for

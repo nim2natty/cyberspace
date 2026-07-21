@@ -51,7 +51,7 @@ def _tool_datasets(request: str = "", use_case: str = "", limit: int = 5):
     results = search_datasets(request, limit=limit or 10)
     if not results:
         return f"no datasets found matching '{request}'."
-    lines = [f"search '{request}' -> {len(results)} dataset(s):"]
+    lines = [f"search '{request}' -> {len(results)} dataset(s)", "datasets:"]
     for d in results:
         lines.append(
             f"- {d['name']} ({d['id']}), use_case={d.get('use_case', '?')}, "

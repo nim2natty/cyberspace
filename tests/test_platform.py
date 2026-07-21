@@ -17,9 +17,8 @@ def main():
     assert not missing, f"missing platforms: {missing}"
     print(f"PASS  platforms loaded: {sorted(loaded)}")
 
-    # Per-module tool counts. iceberg=5, airbender=6 (expanded super-tool),
-    # shadowdragon=16 (chain+metasploit), stickem=9 (router), robodaddy=5 => 41.
-    expected_tools = {"iceberg": 5, "airbender": 6, "shadowdragon": 16,
+    # Per-module tool counts. Iceberg includes its full-system privacy audit.
+    expected_tools = {"iceberg": 6, "airbender": 6, "shadowdragon": 16,
                       "stickem": 9, "robodaddy": 5}
     by_mod = {m: len(TOOL_REGISTRY.by_module(m)) for m in expected}
     for mod, n in expected_tools.items():
