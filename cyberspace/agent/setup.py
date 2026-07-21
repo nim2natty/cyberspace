@@ -61,16 +61,15 @@ def _gather_ollama(spec) -> tuple[str, str, str]:
         console.print(f"[green]Found a running Ollama at {base_url}.[/green]")
         models = _list_ollama_models(base_url)
         if models:
-            console.print("Installed models: " + ", ".join(models))
-            model = Prompt.ask("Model to use", default=models[0])
+            model = _pick_model(models, default=models[0], label="model")
         else:
             console.print(f"[yellow]No models pulled yet.[/yellow] Try: ollama pull {spec.models[0]}")
-            model = Prompt.ask("Model name", default=spec.models[0])
+            model = _pick_model(spec.models, default=spec.models[0], label="model")
     else:
         console.print(f"[yellow]No Ollama detected at {base_url}.[/yellow]")
         console.print("Install it free from https://ollama.com then re-run, or point at a remote one.")
         base_url = Prompt.ask("Ollama base URL", default=base_url)
-        model = Prompt.ask("Model name", default=spec.models[0])
+        model = _pick_model(spec.models, default=spec.models[0], label="model")
     return base_url, "", model
 
 
@@ -87,6 +86,25 @@ def _gather_robodaddy() -> tuple[str, str, str] | None:
     from ..platforms.robodaddy.serve import use_as_cyberbot
     endpoint, api_key = use_as_cyberbot(model)
     return endpoint, api_key, model
+
+
+def _pick_model(options: list[str], *, default: str = "", label: str = "model") -> str:
+    """Numbered model picker. The user picks a number, or types a custom name.
+
+    So you never have to type out a full model string - just press Enter for the
+    default or type the number next to the model you want.
+    """
+    if not options:
+        return Prompt.ask(f"{label} name", default=default)
+    console.print(f"Pick a {label} (enter the number, or type a custom name):")
+    for i, m in enumerate(options, 1):
+        console.print(f"  [cyan]{i}[/cyan]) {m}")
+    choice = Prompt.ask(f"{label.capitalize()}", default="1")
+    if choice.strip().isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(options):
+            return options[idx]
+    return choice.strip() or (options[0] if options else default)
 
 
 def run_wizard(force: bool = False) -> LLMConfig:
@@ -126,7 +144,7 @@ def run_wizard(force: bool = False) -> LLMConfig:
         base_url = Prompt.ask("Base URL (OpenAI-compatible /chat/completions base)",
                               default="http://localhost:8000/v1")
         model = Prompt.ask("Model name", default="local-model")
-        api_key = Prompt.ask("API key (blank = none)", password=True, default="")
+        api_key = Prompt.ask("API key (visible; blank = none)", password=False, default="")
     else:
         # Cloud provider from the catalog: env var first, then prompt for the key.
         env_val = os.environ.get(spec.env_key, "") if spec.env_key else ""
@@ -136,10 +154,12 @@ def run_wizard(force: bool = False) -> LLMConfig:
         else:
             if spec.key_url:
                 console.print(f"[dim]Get a key: {spec.key_url}[/dim]")
-            api_key = Prompt.ask("API key", password=True, default="")
+            # Key is shown as you type so you can verify it's accurate.
+            api_key = Prompt.ask("API key (visible as you type)", password=False, default="")
         if spec.models:
-            console.print("Models: " + ", ".join(spec.models))
-        model = Prompt.ask("Model name", default=spec.models[0] if spec.models else "")
+            model = _pick_model(spec.models, default=spec.models[0], label="model")
+        else:
+            model = Prompt.ask("Model name", default="")
         if not spec.local:
             base_url = Prompt.ask("Base URL (blank = provider default)", default=spec.base_url)
 

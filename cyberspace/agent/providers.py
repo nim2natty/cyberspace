@@ -40,10 +40,11 @@ CATALOG: list[ProviderSpec] = [
         models=["llama3.1:8b", "qwen2.5-coder:7b", "mistral-nemo:7b", "phi3:mini"],
         note="Best for the cyberdeck / Pi. Runs on your own hardware."),
     ProviderSpec(
-        "openai", "OpenAI (GPT)", "openai", base_url="https://api.openai.com/v1",
+        "openai", "OpenAI (GPT / Codex)", "openai", base_url="https://api.openai.com/v1",
         key_url="https://platform.openai.com/api-keys", env_key="OPENAI_API_KEY",
-        models=["gpt-4o-mini", "gpt-4o", "o3-mini"],
-        note="GPT models. Strong, reliable tool-calling."),
+        models=["codex", "codex-mini-latest", "gpt-5", "gpt-5-mini", "gpt-4.1",
+                "o3", "o4-mini", "gpt-4o", "gpt-4o-mini"],
+        note="GPT models + Codex (agentic coding). Strong, reliable tool-calling."),
     ProviderSpec(
         "anthropic", "Anthropic (Claude)", "anthropic",
         key_url="https://console.anthropic.com/settings/keys", env_key="ANTHROPIC_API_KEY",

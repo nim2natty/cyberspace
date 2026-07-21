@@ -37,10 +37,27 @@ def _split_cases(use_case: str = "general", use_cases: str = "") -> list[str]:
 
 
 def _tool_datasets(request: str = "", use_case: str = "", limit: int = 5):
-    """Agent-callable: recommend datasets for a requested model."""
-    from .datasets import recommend_datasets
-    rec = recommend_datasets(request, use_case=use_case, limit=limit)
-    return _format_dataset_recommendations(rec)
+    """Agent-callable: recommend datasets for a requested model.
+
+    With a free-text `request`, searches across ALL datasets by relevance.
+    With an explicit `use_case`, returns the curated recommendation.
+    """
+    if use_case:
+        from .datasets import recommend_datasets
+        rec = recommend_datasets(request, use_case=use_case, limit=limit)
+        return _format_dataset_recommendations(rec)
+    # Free-text fuzzy search across every dataset.
+    from .datasets import search_datasets
+    results = search_datasets(request, limit=limit or 10)
+    if not results:
+        return f"no datasets found matching '{request}'."
+    lines = [f"search '{request}' -> {len(results)} dataset(s):"]
+    for d in results:
+        lines.append(
+            f"- {d['name']} ({d['id']}), use_case={d.get('use_case', '?')}, "
+            f"size={d['size']}, license={d['license']}, access={d.get('access', '?')}; {d['note']}"
+        )
+    return "\n".join(lines)
 
 
 def _tool_plan(use_case: str = "general", days: int = 1):
@@ -111,7 +128,9 @@ class RoboDaddyModule(Module):
     def register_tools(self, registry: ToolRegistry) -> None:
         registry.register(Tool(
             name="robodaddy.datasets",
-            description="Recommend public training datasets for a requested model.",
+            description="Search public training datasets by relevance to a free-text request "
+                        "(e.g. 'python coding', 'blue team alerts'), or pass use_case for a curated "
+                        "recommendation.",
             parameters={"type": "object",
                         "properties": {"request": {"type": "string", "default": ""},
                                        "use_case": {"type": "string", "default": ""},

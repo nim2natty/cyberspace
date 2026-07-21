@@ -101,6 +101,61 @@ def dataset_by_id(dataset_id: str) -> dict:
     return {}
 
 
+def search_datasets(query: str, limit: int = 10) -> list[dict]:
+    """Fuzzy keyword search across ALL datasets.
+
+    Ranks every dataset by how well it matches the free-text query. Matching is
+    done against the dataset name, HF id, description note, and its use-case
+    label - so the user can type anything natural ("python coding data",
+    "blue team alerts", "chat assistant") and get the most relevant results back,
+    regardless of which use-case bucket the dataset lives in.
+
+    Each result is the dataset dict plus ``use_case`` and ``score`` fields.
+    """
+    from .presets import PRESETS
+
+    tokens = _search_tokens(query)
+    results: list[dict] = []
+
+    for use_case, entries in DATASETS.items():
+        label = PRESETS.get(use_case, {}).get("label", use_case)
+        for d in entries:
+            haystack = " ".join([
+                d.get("name", ""), d.get("id", ""), d.get("note", ""),
+                d.get("schema", ""), d.get("size", ""), label, use_case,
+            ]).lower()
+            score = 0
+            for tok in tokens:
+                if not tok:
+                    continue
+                # Stronger weight for name/id hits, lighter for note hits.
+                if tok in d.get("name", "").lower() or tok in d.get("id", "").lower():
+                    score += 5
+                elif tok in label.lower() or tok in use_case.lower():
+                    score += 3
+                elif tok in haystack:
+                    score += 1
+            if score > 0 or not tokens:
+                r = dict(d)
+                r["use_case"] = use_case
+                r["use_case_label"] = label
+                r["score"] = score
+                results.append(r)
+
+    # No query + no tokens: return everything ranked by use-case then name.
+    results.sort(key=lambda r: (-r["score"], r["use_case"], r.get("name", "")))
+    if limit and limit > 0:
+        results = results[:limit]
+    return results
+
+
+def _search_tokens(query: str) -> list[str]:
+    """Split a query into normalized search tokens (len >= 2)."""
+    raw = (query or "").lower()
+    tokens = [t for t in raw.replace("-", " ").split() if len(t) >= 2]
+    return tokens
+
+
 def recommend_datasets(request: str = "", *, use_case: str = "", limit: int = 0) -> dict:
     """Return dataset recommendations for a free-text model request.
 

@@ -33,6 +33,32 @@ from .providers import PROVIDERS
 from .registry import list_keys, list_models
 
 
+def _print_dataset_table(console: Console, datasets: list[dict]) -> None:
+    t = Table("#", "dataset", "HF repo", "size", "license/access", "schema")
+    for i, d in enumerate(datasets):
+        access = d.get("access", "-")
+        t.add_row(str(i), d["name"], d["id"], d["size"],
+                  f"{d['license']} / {access}", d.get("schema", "-"))
+    console.print(t)
+    console.print("\n[bold]notes[/bold]")
+    for i, d in enumerate(datasets):
+        marker = "recommended" if i == 0 else "candidate"
+        console.print(f"  [{i}] {marker}: {d['id']} - {d['note']}")
+
+
+def _print_search_results(console: Console, results: list[dict]) -> None:
+    t = Table("#", "dataset", "HF repo", "use case", "size", "license/access")
+    for i, d in enumerate(results):
+        access = d.get("access", "-")
+        t.add_row(str(i + 1), d["name"], d["id"], d.get("use_case_label", d.get("use_case", "-")),
+                  d["size"], f"{d['license']} / {access}")
+    console.print(t)
+    console.print("\n[bold]notes[/bold]")
+    for i, d in enumerate(results):
+        console.print(f"  [{i + 1}] {d['id']} - {d['note']} "
+                      f"[dim](use case: {d.get('use_case_label', d.get('use_case', '-'))})[/dim]")
+
+
 def build_robodaddy_cli(console: Console) -> typer.Typer:
     app = typer.Typer(help="RoboDaddy: plan, dry-run, and dispatch model fine-tunes.")
 
@@ -46,25 +72,37 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
 
     @app.command("datasets")
     def datasets(
-        request: str = typer.Argument("", help="what you want the model to do"),
-        use_case: str = typer.Option("", "-u", "--use-case", help="explicit use-case key"),
-        limit: int = typer.Option(0, "--limit", help="max rows; 0 shows all"),
+        request: str = typer.Argument("", help="what you want the model to do (free text)"),
+        use_case: str = typer.Option("", "-u", "--use-case",
+                                     help="restrict to a use-case preset (offensive_pentest, code, ...)"),
+        limit: int = typer.Option(10, "--limit", help="max rows"),
     ):
-        """Show dataset recommendations for a model request."""
-        rec = recommend_datasets(request, use_case=use_case, limit=limit)
-        console.print(f"[green]matched use case:[/green] {rec['label']}  [dim]({rec['use_case']})[/dim]")
-        console.print(f"[dim]recommended base: {rec['base_model']}   method: {rec['method']}[/dim]\n")
-        t = Table("#", "dataset", "HF repo", "size", "license/access", "schema")
-        for i, d in enumerate(rec["datasets"]):
-            access = d.get("access", "-")
-            t.add_row(str(i), d["name"], d["id"], d["size"],
-                      f"{d['license']} / {access}", d.get("schema", "-"))
-        console.print(t)
-        console.print("\n[bold]recommendation notes[/bold]")
-        for i, d in enumerate(rec["datasets"]):
-            marker = "recommended" if i == 0 else "candidate"
-            console.print(f"  [{i}] {marker}: {d['id']} - {d['note']}")
-        hint = request or rec["use_case"]
+        """Search public training datasets by relevance to your query.
+
+        Type anything you want the model to be good at (e.g. "python coding",
+        "blue team alert triage", "chatty assistant") and we pull the most
+        relevant datasets from across all use-cases. Add --use-case to restrict
+        to a single preset instead.
+        """
+        if use_case:
+            # Explicit preset path: show the curated recommendation for that use case.
+            rec = recommend_datasets(request, use_case=use_case, limit=limit)
+            console.print(f"[green]use case:[/green] {rec['label']}  [dim]({rec['use_case']})[/dim]")
+            console.print(f"[dim]recommended base: {rec['base_model']}   method: {rec['method']}[/dim]\n")
+            _print_dataset_table(console, rec["datasets"])
+            console.print(f"\n[dim]plan it: cyberspace robodaddy plan \"{use_case}\"[/dim]")
+            return
+
+        # Default: fuzzy search across ALL datasets by query.
+        from .datasets import search_datasets
+        results = search_datasets(request, limit=limit)
+        if request:
+            console.print(f"[green]search:[/green] \"{request}\"  "
+                          f"[dim]({len(results)} relevant dataset(s))[/dim]\n")
+        else:
+            console.print(f"[green]all datasets[/green]  [dim](top {len(results)})[/dim]\n")
+        _print_search_results(console, results)
+        hint = request or "general"
         console.print(f"\n[dim]plan it: cyberspace robodaddy plan \"{hint}\"[/dim]")
 
     @app.command("gpus")
