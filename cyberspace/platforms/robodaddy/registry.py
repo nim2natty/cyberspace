@@ -36,7 +36,8 @@ class TrainedModel:
     use_case: str
     method: str
     created: str = ""
-    status: str = "planned"            # planned | training | trained | served
+    status: str = "planned"            # planned | training | trained-not-evaluated | served
+    evaluation_status: str = "not-tested"  # not-tested | passed | failed | uncertain
     stats: dict = field(default_factory=dict)   # loss, samples, hours, cost
     endpoint: Optional[str] = None     # OpenAI-compatible URL when served
     served_model_name: Optional[str] = None
@@ -172,7 +173,7 @@ def issue_key(model_name: str, endpoint: str, note: str = "") -> ApiKey:
             keys = _load(KEYS_FILE)
             keys.append(asdict(key))
             _save(KEYS_FILE, keys)
-        # Mark the model served.
+        # Mark deployment without overwriting the independent evaluation state.
         m = get_model(model_name)
         if m:
             m.status = "served"

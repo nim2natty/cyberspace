@@ -19,6 +19,8 @@ JOBS_DIR = MODULES_DIR / "robodaddy" / "jobs"
 def launch_background(plan: TrainingPlan, *, dry_run: bool = True,
                       vast_offer_id: Optional[int] = None) -> TrainedModel:
     """Launch a worker independent of the terminal and return its queued record."""
+    if not plan.success_criteria:
+        raise ValueError("RoboDaddy will not queue training without user success criteria")
     ensure_dirs()
     if get_model(plan.name) is not None:
         plan.name = f"{plan.name}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:19]}"
@@ -95,7 +97,7 @@ def refresh_jobs() -> list[TrainedModel]:
                 try:
                     stats = json.loads(stats_file.read_text())
                     model.stats = {**model.stats, **stats}
-                    model.status = "trained"
+                    model.status = "trained-not-evaluated"
                 except Exception:
                     model.status = "failed"
             else:

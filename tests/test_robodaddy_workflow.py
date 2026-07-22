@@ -74,7 +74,8 @@ def test_detached_training_survives_launcher_exit(tmp_path):
     """Real subprocess: launcher exits, independent worker completes and persists done."""
     env = {**os.environ, "CYBERSPACE_HOME": str(tmp_path)}
     result = subprocess.run(
-        [sys.executable, "-m", "cyberspace", "robodaddy", "train", "general"],
+        [sys.executable, "-m", "cyberspace", "robodaddy", "train", "general",
+         "--success-criterion", "All integration-test jobs complete and evaluation artifacts exist"],
         cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
     assert "may close this terminal" in result.stdout.lower()
@@ -85,10 +86,10 @@ def test_detached_training_survives_launcher_exit(tmp_path):
         if models_file.exists():
             records = json.loads(models_file.read_text())
             status = records[0]["status"] if records else ""
-            if status == "trained":
+            if status == "trained-not-evaluated":
                 break
         time.sleep(0.2)
-    assert status == "trained"
+    assert status == "trained-not-evaluated"
     progress = tmp_path / "modules" / "robodaddy" / "jobs" / records[0]["name"] / "progress.jsonl"
     assert '"stage": "done"' in progress.read_text()
 
@@ -97,6 +98,7 @@ def test_paid_dispatch_supplies_training_bootstrap(tmp_path, monkeypatch):
     import cyberspace.config as config
     from cyberspace.platforms.robodaddy import registry, train
     from cyberspace.platforms.robodaddy.plan import build_plan
+    from cyberspace.platforms.robodaddy.parameters import profile
 
     root = tmp_path / "robodaddy"
     monkeypatch.setattr(config, "MODULES_DIR", tmp_path)
@@ -114,7 +116,10 @@ def test_paid_dispatch_supplies_training_bootstrap(tmp_path, monkeypatch):
 
     import cyberspace.platforms.robodaddy.vast as vast
     monkeypatch.setattr(vast, "VastClient", Vast)
-    plan = build_plan("general", dataset_id="databricks/databricks-dolly-15k")
+    params = profile("custom_blank")
+    params.success_criteria = ["Every paid-dispatch test receives a valid bootstrap script"]
+    plan = build_plan("general", dataset_id="databricks/databricks-dolly-15k",
+                      parameters=params)
     model = train.run_training(plan, dry_run=False, vast_offer_id=123)
     assert model.status == "training"
     assert "base64 -d" in captured["onstart"]
@@ -125,6 +130,7 @@ def test_gated_data_is_blocked_before_paid_rental(tmp_path, monkeypatch):
     import cyberspace.config as config
     from cyberspace.platforms.robodaddy import registry, train
     from cyberspace.platforms.robodaddy.plan import build_plan
+    from cyberspace.platforms.robodaddy.parameters import profile
 
     root = tmp_path / "robodaddy"
     monkeypatch.setattr(config, "MODULES_DIR", tmp_path)
@@ -140,6 +146,9 @@ def test_gated_data_is_blocked_before_paid_rental(tmp_path, monkeypatch):
 
     import cyberspace.platforms.robodaddy.vast as vast
     monkeypatch.setattr(vast, "VastClient", Vast)
-    plan = build_plan("offensive_pentest", dataset_id="trendmicro-ailab/Primus-Instruct")
+    params = profile("custom_blank")
+    params.success_criteria = ["Zero GPU rentals occur before gated-data rejection in the test"]
+    plan = build_plan("offensive_pentest", dataset_id="trendmicro-ailab/Primus-Instruct",
+                      parameters=params)
     model = train.run_training(plan, dry_run=False, vast_offer_id=123)
     assert model.status == "planned"

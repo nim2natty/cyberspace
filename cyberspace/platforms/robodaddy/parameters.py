@@ -84,6 +84,7 @@ class ModelParameters:
     """The complete set of parameters a user designs their model with."""
     base_model: str = ""
     system_prompt: str = ""
+    success_criteria: list[str] = field(default_factory=list)
     method: str = ""
     epochs: Optional[int] = None
     learning_rate: Optional[float] = None
@@ -220,7 +221,8 @@ def load_parameters() -> Optional[ModelParameters]:
 def build_system_prompt(params: ModelParameters, *, preset_prompt: str = "") -> str:
     """Compose the training system prompt from the cyber focus + guardrails."""
     if params.system_prompt.strip():
-        return params.system_prompt.strip() + "\n\n" + _floor_line()
+        prompt = params.system_prompt.strip() + "\n\n" + _floor_line()
+        return _append_success_criteria(prompt, params.success_criteria)
 
     f = params.focus
     g = params.guardrails
@@ -276,7 +278,25 @@ def build_system_prompt(params: ModelParameters, *, preset_prompt: str = "") -> 
     parts.append(
         "When you advise on an attack path, frame it for authorized assessment, "
         "detection, and hardening so the same reasoning serves defense and offense.")
-    return " ".join(parts)
+    return _append_success_criteria(" ".join(parts), params.success_criteria)
+
+
+def _append_success_criteria(prompt: str, criteria: list[str]) -> str:
+    """Bake the user's model-level definition of success into its behavior."""
+    if not criteria:
+        return prompt
+    if not isinstance(criteria, list) or not all(isinstance(item, str) for item in criteria):
+        raise ValueError("success_criteria must be a list of strings")
+    from .prompt_guide import validate_success_criteria
+    criteria = validate_success_criteria(criteria)
+    lines = [prompt, "", "<success_criteria>"]
+    lines.extend(f"- {criterion}" for criterion in criteria)
+    lines.extend([
+        "</success_criteria>",
+        "For every answer, verify these criteria against evidence. Label each pass, "
+        "fail, uncertain, or not-tested; never invent facts, sources, or completion.",
+    ])
+    return "\n".join(lines)
 
 
 def _floor_line(extra=None) -> str:
@@ -288,6 +308,7 @@ def _floor_line(extra=None) -> str:
 # Help / guidance so the user can actually set their parameters
 # ---------------------------------------------------------------------------
 PARAMETER_GUIDE = [
+    ("success_criteria", "Required model acceptance criteria: observable outcomes, evaluation methods, and target thresholds."),
     ("base_model", "Base open-weights model to fine-tune (llama3.1-8b, qwen2.5-7b, mistral-7b, qwen2.5-14b, llama3.1-70b, phi3-mini)."),
     ("method", "Fine-tuning method: qlora (cheap, default), lora, or full (expensive)."),
     ("epochs", "Passes over the data. 1-3 cheap, 3-6 thorough, more risks overfitting."),
@@ -338,6 +359,7 @@ def apply_to_plan_dict(plan_dict: dict, params: ModelParameters,
     if params.method and params.method in ("qlora", "lora", "full"):
         plan_dict["method"] = params.method
     plan_dict["system_prompt"] = system_prompt
+    plan_dict["success_criteria"] = list(params.success_criteria)
     plan_dict["focus"] = params.focus.to_dict()
     plan_dict["guardrails"] = params.guardrails.to_dict()
     extra = {}
@@ -365,6 +387,9 @@ def merge_overrides(params: ModelParameters, **overrides) -> ModelParameters:
             if section in d and isinstance(d[section], dict) and field_name in d[section]:
                 d[section][field_name] = value
         elif key in d:
+            if key == "success_criteria":
+                from .prompt_guide import validate_success_criteria
+                value = validate_success_criteria(value)
             d[key] = value
     focus = CyberFocus(**(d.get("focus") or {}))
     gr = Guardrails(**(d.get("guardrails") or {}))

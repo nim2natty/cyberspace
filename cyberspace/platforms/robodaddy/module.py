@@ -10,6 +10,7 @@ import typer
 from rich.console import Console
 
 from ...modules.base import Module, ModuleInfo, Tool, ToolRegistry
+from .prompt_guide import parse_success_criteria, validate_success_criteria
 
 console = Console()
 
@@ -60,11 +61,19 @@ def _tool_datasets(request: str = "", use_case: str = "", limit: int = 5):
     return "\n".join(lines)
 
 
-def _tool_plan(use_case: str = "general", days: int = 1):
+def _tool_plan(use_case: str = "general", days: int = 1, success_criteria: str = ""):
     """Agent-callable: build a training plan + cost estimate."""
+    try:
+        criteria = validate_success_criteria(success_criteria)
+    except ValueError:
+        return ("success_criteria required before planning. Provide observable outcomes, "
+                "evaluation methods, and target thresholds; see `robodaddy prompt-guide`.")
     from .datasets import recommend_datasets
     from .plan import build_plan
-    p = build_plan(use_case, days=days)
+    from .parameters import profile
+    params = profile("custom_blank")
+    params.success_criteria = criteria
+    p = build_plan(use_case, days=days, parameters=params)
     rec = recommend_datasets(use_case, use_case=p.use_case, limit=3)
     return (f"plan {p.name}: base={p.base_model} data={p.dataset_id} "
             f"gpu={p.num_gpus}x{p.gpu} epochs={p.epochs} time={p.hours}h "
@@ -73,13 +82,22 @@ def _tool_plan(use_case: str = "general", days: int = 1):
 
 
 def _tool_train(use_case: str = "general", days: int = 1, base: str = "",
-                gpu: str = "", dataset: str = "", use_cases: str = ""):
+                gpu: str = "", dataset: str = "", use_cases: str = "",
+                success_criteria: str = ""):
     """Agent-callable: run one or more training jobs (dry-run by default)."""
+    try:
+        criteria = validate_success_criteria(success_criteria)
+    except ValueError:
+        return ("success_criteria required before training. Provide observable outcomes, "
+                "evaluation methods, and target thresholds; see `robodaddy prompt-guide`.")
     from .plan import build_plan
+    from .parameters import profile
     cases = _split_cases(use_case, use_cases)
+    params = profile("custom_blank")
+    params.success_criteria = criteria
     plans = [
         build_plan(case, base_model=(base or None), dataset_id=(dataset or None),
-                   gpu=(gpu or None), days=days)
+                   gpu=(gpu or None), days=days, parameters=params)
         for case in cases
     ]
     from .jobs import launch_background
@@ -162,6 +180,8 @@ def _tool_keys(action: str = "list", model_name: str = "", prefix: str = ""):
 
 
 def _coerce_known_agent(current, value: str):
+    if isinstance(current, list):
+        return parse_success_criteria(value)
     if isinstance(current, bool):
         return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
     if isinstance(current, int):
@@ -214,13 +234,19 @@ def _tool_parameters(action: str = "show", key: str = "", value: str = "", profi
 
 
 def _tool_cyber(flavor: str = "redteam", use_case: str = "", dataset: str = "",
-                days: int = 1, base: str = "", scope: str = "", guardrail_level: str = ""):
+                days: int = 1, base: str = "", scope: str = "", guardrail_level: str = "",
+                success_criteria: str = ""):
     """Agent-callable: build a cyber bot (red-team/adversary emulation or defense)."""
     from .parameters import profile as load_profile, merge_overrides, save_parameters
     from .plan import build_plan
     from .jobs import launch_background
     prof_name = "cyber_redteam" if str(flavor).startswith("red") else "cyber_defensive"
     params = load_profile(prof_name)
+    try:
+        params.success_criteria = validate_success_criteria(success_criteria)
+    except ValueError:
+        return ("success_criteria required before building a cyber model. Provide observable "
+                "outcomes, evaluation methods, and target thresholds.")
     overrides = {}
     if scope:
         overrides["guardrails.authorization_scope"] = scope
@@ -245,12 +271,17 @@ def _tool_cyber(flavor: str = "redteam", use_case: str = "", dataset: str = "",
 
 def _tool_custom(use_case: str = "general", dataset: str = "", base: str = "",
                  epochs=3, learning_rate=2e-4, batch_size=4, max_seq_len=2048,
-                 lora_r=16, days: int = 1):
+                 lora_r=16, days: int = 1, success_criteria: str = ""):
     """Agent-callable: build a fully custom bot with user-defined parameters."""
     from .parameters import profile as load_profile, save_parameters
     from .plan import build_plan
     from .jobs import launch_background
     params = load_profile("custom_blank")
+    try:
+        params.success_criteria = validate_success_criteria(success_criteria)
+    except ValueError:
+        return ("success_criteria required before building a custom model. Provide observable "
+                "outcomes, evaluation methods, and target thresholds.")
     if base:
         params.base_model = base
     params.epochs = int(epochs)
@@ -339,8 +370,10 @@ class RoboDaddyModule(Module):
             description="Build a training plan with dataset options and cost/time estimate.",
             parameters={"type": "object",
                         "properties": {"use_case": {"type": "string"},
-                                       "days": {"type": "integer", "default": 1}},
-                        "required": ["use_case"]}, fn=_tool_plan))
+                                       "days": {"type": "integer", "default": 1},
+                                       "success_criteria": {"type": "string", "description":
+                                           "required measurable criteria separated by newlines"}},
+                        "required": ["use_case", "success_criteria"]}, fn=_tool_plan))
         registry.register(Tool(
             name="robodaddy.train",
             description="Run one or more fine-tune jobs as dry-runs with progress files.",
@@ -351,8 +384,10 @@ class RoboDaddyModule(Module):
                                        "days": {"type": "integer", "default": 1},
                                        "base": {"type": "string", "default": ""},
                                        "dataset": {"type": "string", "default": ""},
-                                       "gpu": {"type": "string", "default": ""}},
-                        "required": ["use_case"]}, fn=_tool_train))
+                                       "gpu": {"type": "string", "default": ""},
+                                       "success_criteria": {"type": "string", "description":
+                                           "required measurable criteria separated by newlines"}},
+                        "required": ["use_case", "success_criteria"]}, fn=_tool_train))
         registry.register(Tool(
             name="robodaddy.models",
             description="List trained models in the registry.",
@@ -419,8 +454,10 @@ class RoboDaddyModule(Module):
                                                   "description": "authorized scope"},
                                        "guardrail_level": {"type": "string", "default": ""},
                                        "base": {"type": "string", "default": ""},
-                                       "days": {"type": "integer", "default": 1}},
-                        "required": ["flavor"]}, fn=_tool_cyber))
+                                       "days": {"type": "integer", "default": 1},
+                                       "success_criteria": {"type": "string", "description":
+                                           "required measurable criteria separated by newlines"}},
+                        "required": ["flavor", "success_criteria"]}, fn=_tool_cyber))
         registry.register(Tool(
             name="robodaddy.custom",
             description="Build a CUSTOM BOT with fully user-defined parameters and any "
@@ -434,8 +471,10 @@ class RoboDaddyModule(Module):
                                        "batch_size": {"type": "integer", "default": 4},
                                        "max_seq_len": {"type": "integer", "default": 2048},
                                        "lora_r": {"type": "integer", "default": 16},
-                                       "days": {"type": "integer", "default": 1}},
-                        "required": []}, fn=_tool_custom))
+                                       "days": {"type": "integer", "default": 1},
+                                       "success_criteria": {"type": "string", "description":
+                                           "required measurable criteria separated by newlines"}},
+                        "required": ["success_criteria"]}, fn=_tool_custom))
         registry.register(Tool(
             name="robodaddy.refresh",
             description="Refresh the most recent Hugging Face datasets into the local cache "

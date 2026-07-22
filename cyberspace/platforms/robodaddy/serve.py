@@ -44,8 +44,11 @@ def serve(model_name: str, *, target: str = "ollama", port: int = 11435,
     m = get_model(model_name)
     if m is None:
         raise ValueError(f"no trained model named '{model_name}'. Run train first.")
-    if m.status not in ("trained", "served"):
-        raise ValueError(f"model '{model_name}' status is '{m.status}', not 'trained'.")
+    if m.status not in ("trained", "trained-not-evaluated", "served"):
+        raise ValueError(f"model '{model_name}' status is '{m.status}', not trained.")
+    if m.evaluation_status != "passed":
+        on_event("warning", "model training completed but success criteria are not tested; "
+                 f"evaluation status is {m.evaluation_status}; serving does not imply success")
 
     SERVE_DIR.mkdir(parents=True, exist_ok=True)
     sdir = SERVE_DIR / model_name

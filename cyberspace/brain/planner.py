@@ -137,14 +137,14 @@ def _known_tool_names() -> list[str]:
         pass
     try:
         from ..platforms.shadowdragon.catalog import all_tools
-        names += ["shadowdragon.run::" + t for t in all_tools()]
+        names += ["shadowdragon.kali_run::" + t for t in all_tools()]
     except Exception:
         pass
     return sorted(set(names))
 
 
 def _looks_like_tool(name) -> bool:
-    """Allow shadowdragon 'run any tool' style names like 'shadowdragon.run::nmap'."""
+    """Allow ShadowDragon generic Kali runner names like 'shadowdragon.kali_run::nmap'."""
     s = str(name)
     return "." in s or "::" in s
 
@@ -162,13 +162,13 @@ def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> BrainPl
         tasks.append(BrainTask(
             stage="recon",
             description="Discover live devices and open services using independent methods.",
-            tools=["airbender.ping-sweep", "airbender.nmap", "airbender.chain"],
+            tools=["airbender.ping_sweep", "airbender.nmap", "airbender.chain"],
             parallel=True))
         tasks.append(BrainTask(
             stage="recon",
             description=("For each discovered device, capture and inspect packets so the "
                         "operator can view traffic in a readable form (links to .pcap files)."),
-            tools=["shadowdragon.run::tshark", "shadowdragon.run::tcpdump"],
+            tools=["shadowdragon.kali_run::tshark", "shadowdragon.kali_run::tcpdump"],
             depends_on=[0], parallel=True))
         tasks.append(BrainTask(
             stage="objectives",
@@ -180,12 +180,12 @@ def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> BrainPl
         tasks.append(BrainTask(
             stage="recon",
             description="Identify the web technology and map its surface.",
-            tools=["shadowdragon.run::whatweb", "shadowdragon.run::gobuster", "shadowdragon.run::nikto"],
+            tools=["shadowdragon.whatweb", "shadowdragon.gobuster", "shadowdragon.nikto"],
             parallel=True))
         tasks.append(BrainTask(
             stage="exploit",
             description="Test for the highest-impact web weaknesses.",
-            tools=["shadowdragon.run::nuclei", "shadowdragon.run::sqlmap"],
+            tools=["shadowdragon.kali_run::nuclei", "shadowdragon.sqlmap"],
             depends_on=[0], parallel=True))
         tasks.append(BrainTask(
             stage="objectives",
@@ -197,7 +197,7 @@ def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> BrainPl
         tasks.append(BrainTask(
             stage="exploit",
             description="Attempt credential recovery with multiple engines and wordlists.",
-            tools=["shadowdragon.run::hashcat", "shadowdragon.run::john", "shadowdragon.run::hydra"],
+            tools=["shadowdragon.hashcat", "shadowdragon.john", "shadowdragon.hydra"],
             parallel=True))
         tasks.append(BrainTask(
             stage="objectives",
@@ -221,11 +221,11 @@ def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> BrainPl
 def _default_tools_for_stage(stage: str) -> list[str]:
     """Default toolset for a stage when no specific heuristic matched."""
     defaults = {
-        "recon": ["airbender.ping-sweep", "airbender.nmap", "airbender.dig"],
-        "weapon": ["shadowdragon.run::searchsploit"],
+        "recon": ["airbender.ping_sweep", "airbender.nmap", "airbender.dig"],
+        "weapon": ["shadowdragon.searchsploit"],
         "delivery": ["iceberg.browse"],
-        "exploit": ["shadowdragon.run::nuclei", "shadowdragon.run::sqlmap"],
-        "install": ["shadowdragon.run::msfconsole"],
+        "exploit": ["shadowdragon.kali_run::nuclei", "shadowdragon.sqlmap"],
+        "install": ["shadowdragon.kali_run::msfconsole"],
         "c2": ["iceberg.find"],
         "objectives": ["brain.report"],
     }

@@ -108,6 +108,8 @@ if __name__ == "__main__":
 
 def write_job_files(plan: TrainingPlan) -> Path:
     """Write the generated training script + the plan to the job directory."""
+    if not plan.success_criteria:
+        raise ValueError("RoboDaddy will not prepare training without user success criteria")
     from .datasets import dataset_by_id
 
     ensure_dirs()
@@ -154,10 +156,19 @@ def write_job_files(plan: TrainingPlan) -> Path:
     )
     (jdir / "train.py").write_text(script)
     (jdir / "plan.json").write_text(json.dumps(plan.to_dict(), indent=2))
+    (jdir / "evaluation.json").write_text(json.dumps({
+        "status": "not-tested",
+        "note": ("Training completion is not model-quality proof. Run held-out evaluations "
+                 "for every criterion before declaring the model successful."),
+        "criteria": [{"criterion": criterion, "status": "not-tested", "evidence": ""}
+                     for criterion in plan.success_criteria],
+    }, indent=2))
     (jdir / "README.txt").write_text(
         f"RoboDaddy job: {plan.name}\nBase: {plan.base_model} ({base_hf})\n"
         f"Dataset: {plan.dataset_id}\nDataset schema: {schema}\nDataset access: {access}\n"
         f"Method: {plan.method} on {plan.gpu}\n"
+         f"Success criteria: {json.dumps(plan.success_criteria)}\n"
+         f"Evaluation:      {jdir / 'evaluation.json'} (not-tested until empirical evals run)\n"
         f"{gated_note}\n"
         f"Run locally:     python train.py\n"
         f"Progress:        tail -f {jdir / 'progress.jsonl'}\n"
@@ -223,6 +234,8 @@ def run_training(plan: TrainingPlan, *, dry_run: bool = True,
                  vast_offer_id: Optional[int] = None,
                  on_event: Optional[EventFn] = None) -> TrainedModel:
     """Execute (or simulate) a training job. Returns the updated model record."""
+    if not plan.success_criteria:
+        raise ValueError("RoboDaddy will not train without user-specified success criteria")
     on_event = on_event or _noop
     ensure_dirs()
     m = get_model(plan.name)
@@ -252,8 +265,8 @@ def run_training(plan: TrainingPlan, *, dry_run: bool = True,
             time.sleep(0.15)
         stats = _simulated_stats(plan)
         stats.update({"job_dir": str(jdir), "progress_file": str(progress_file)})
-        final_status = "trained"
-        emit("done", f"trained (simulated): end_loss={stats['end_loss']}")
+        final_status = "trained-not-evaluated"
+        emit("done", f"training complete (simulated), evaluation not tested: end_loss={stats['end_loss']}")
     else:
         if vast_offer_id is None:
             emit("error", "real run needs --offer <id> from 'robodaddy instances'")

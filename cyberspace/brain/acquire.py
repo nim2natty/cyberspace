@@ -52,7 +52,7 @@ def missing_tools(tool_names: list[str]) -> list[str]:
 
 def _binary_name(tool_ref: str) -> str:
     """Normalize a plan tool reference to a host binary name."""
-    # 'shadowdragon.run::tshark' -> 'tshark' ; 'airbender.nmap' -> 'nmap'
+    # 'shadowdragon.kali_run::tshark' -> 'tshark' ; 'airbender.nmap' -> 'nmap'
     return tool_ref.rsplit("::", 1)[-1].rsplit(".", 1)[-1]
 
 

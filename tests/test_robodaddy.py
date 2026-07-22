@@ -42,7 +42,10 @@ def main():
 
     # 4) Plan building + cost estimate.
     from cyberspace.platforms.robodaddy.plan import build_plan
-    p = build_plan("offensive_pentest", days=2)
+    from cyberspace.platforms.robodaddy.parameters import profile
+    params = profile("custom_blank")
+    params.success_criteria = ["All dry-run tests produce persisted artifacts and metrics"]
+    p = build_plan("offensive_pentest", days=2, parameters=params)
     assert p.base_model and p.dataset_id and p.gpu
     assert p.hours > 0 and p.cost_mid > 0
     assert p.epochs >= 3  # 2 days scales epochs up
@@ -71,7 +74,7 @@ def main():
     from cyberspace.platforms.robodaddy.train import run_training
     events = []
     m2 = run_training(p, dry_run=True, on_event=lambda s, m: events.append((s, m)))
-    assert m2.status == "trained"
+    assert m2.status == "trained-not-evaluated"
     assert "end_loss" in m2.stats and "loss_curve" in m2.stats
     assert "progress_file" in m2.stats
     assert any(s == "done" for s, _ in events)
@@ -85,9 +88,9 @@ def main():
 
     # 7) Batch dry-run supports more than one model request.
     from cyberspace.platforms.robodaddy.train import run_training_batch
-    p2 = build_plan("code", days=1)
+    p2 = build_plan("code", days=1, parameters=params)
     batch = run_training_batch([p, p2], dry_run=True)
-    assert len(batch) == 2 and all(m.status == "trained" for m in batch)
+    assert len(batch) == 2 and all(m.status == "trained-not-evaluated" for m in batch)
     print(f"PASS  batch training dry-run: {[m.name for m in batch]}")
 
     # 8) Agent tools registered.
@@ -96,7 +99,8 @@ def main():
     discover_and_load()
     assert TOOL_REGISTRY.get("robodaddy.datasets"), "robodaddy.datasets not registered"
     assert TOOL_REGISTRY.get("robodaddy.plan"), "robodaddy.plan not registered"
-    result = TOOL_REGISTRY.get("robodaddy.plan").fn(use_case="general")
+    result = TOOL_REGISTRY.get("robodaddy.plan").fn(
+        use_case="general", success_criteria="Every plan test contains cost and dataset evidence")
     assert "plan" in result and "$" in result and "datasets:" in result
     ds_result = TOOL_REGISTRY.get("robodaddy.datasets").fn(request="build a code model")
     assert "code" in ds_result.lower() and "datasets:" in ds_result

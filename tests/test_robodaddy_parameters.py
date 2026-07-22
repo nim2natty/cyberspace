@@ -60,6 +60,7 @@ def test_build_plan_applies_user_parameters_and_system_prompt(tmp_path, monkeypa
     monkeypatch.setattr(registry, "LOCK_FILE", root / ".registry.lock")
 
     params = profile("cyber_redteam")
+    params.success_criteria = ["At least 90% rubric pass rate on 100 held-out cases"]
     params.dataset_ids = ["trendmicro-ailab/Primus-Instruct"]
     params.epochs = 5
     params.lora_r = 32
@@ -71,6 +72,8 @@ def test_build_plan_applies_user_parameters_and_system_prompt(tmp_path, monkeypa
     assert plan.system_prompt and "attack-path reasoning" in plan.system_prompt.lower()
     assert plan.focus.get("adversary_modeling") is True
     assert plan.guardrails.get("guardrail_level") == "red-team-engagement"
+    assert plan.success_criteria == params.success_criteria
+    assert "<success_criteria>" in plan.system_prompt
 
 
 def test_train_script_uses_attuned_prompt_and_hyperparams(tmp_path, monkeypatch):
@@ -87,11 +90,12 @@ def test_train_script_uses_attuned_prompt_and_hyperparams(tmp_path, monkeypatch)
     monkeypatch.setattr(train, "JOBS_DIR", root / "jobs")
 
     params = profile("cyber_redteam")
+    params.success_criteria = ["All artifact tests preserve the configured prompt and hyperparameters"]
     params.dataset_ids = ["garage-bAInd/Open-Platypus"]
     params.weight_decay = 0.01
     plan = build_plan("cyber_redteam", parameters=params, days=1)
     model = train.run_training(plan, dry_run=True)
-    assert model.status == "trained"
+    assert model.status == "trained-not-evaluated"
     script = (root / "jobs" / plan.name / "train.py").read_text()
     # The attuned system prompt is baked into the generated script.
     assert "attack-path reasoning" in script.lower()
@@ -117,6 +121,7 @@ def test_cyber_tool_builds_scoped_plan(tmp_path, monkeypatch):
     # Force offline dataset discovery path so no network is required.
     monkeypatch.setattr(discovery, "discover_datasets", lambda *a, **k: [])
     out = module._tool_cyber(flavor="redteam", dataset="trendmicro-ailab/Primus-Instruct",
-                             scope="my authorized lab", guardrail_level="authorized-lab")
+                             scope="my authorized lab", guardrail_level="authorized-lab",
+                             success_criteria="90% pass rate on 100 held-out lab cases")
     assert "cyber bot plan launched" in out
     assert "authorized-lab" in out

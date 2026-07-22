@@ -15,6 +15,7 @@ from typing import Optional
 from rich.console import Console
 
 from ..modules.base import TOOL_REGISTRY, Tool
+from ..success import SUCCESS_PROTOCOL, assess_tool_output, tool_contract_text
 from .llm import AgentResponse, LLMConfig, get_provider, chat_with_failover
 
 DEFAULT_SYSTEM = (
@@ -89,7 +90,7 @@ def build_system_prompt(base: str = "") -> str:
     try:
         from ..memory import context_block
         from ..projects import get_active, search as project_search
-        prompt = (base or DEFAULT_SYSTEM) + context_block()
+        prompt = (base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL + context_block()
         from ..projects import context_block as project_context
         prompt += project_context()
         # Surface the Brain (evolving backbone) + its learned playbook so the
@@ -127,7 +128,7 @@ def build_system_prompt(base: str = "") -> str:
         )
         return prompt
     except Exception:
-        return base or DEFAULT_SYSTEM
+        return (base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL
 
 
 class Agent:
@@ -169,7 +170,11 @@ class Agent:
                        args=call.arguments, result_summary=str(result)[:300])
             except Exception:
                 pass
-            return str(result)
+            status, reason = assess_tool_output(result)
+            contract = tool_contract_text(
+                tool.name, tool.success_criteria, tool.verification)
+            return (f"{result}\n\n[RUNTIME CHECK: {status.upper()} - {reason}]\n"
+                    f"{contract}")
         except Exception as e:
             return f"ERROR executing {call.name}: {e}"
 

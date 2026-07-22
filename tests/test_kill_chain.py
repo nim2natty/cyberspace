@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from cyberspace.agent.llm import (
     AgentResponse, LLMConfig, ProviderError, ToolCall, _anthropic_messages,
-    chat_with_failover,
+    _anthropic_tool_name, chat_with_failover,
 )
 from cyberspace.swarm import KILL_CHAIN, detect_stage
 
@@ -33,6 +33,12 @@ class KillChainTests(unittest.TestCase):
         ])
         self.assertEqual(converted[0]["content"][0]["id"], "tool-7")
         self.assertEqual(converted[1]["content"][0]["tool_use_id"], "tool-7")
+
+    def test_anthropic_tool_name_is_native_and_stable(self):
+        alias = _anthropic_tool_name("robodaddy.train")
+        self.assertNotIn(".", alias)
+        self.assertEqual(alias, _anthropic_tool_name("robodaddy.train"))
+        self.assertLessEqual(len(alias), 64)
 
     def test_model_failover_keeps_transcript(self):
         class FakeProvider:

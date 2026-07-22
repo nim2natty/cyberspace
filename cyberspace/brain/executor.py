@@ -23,6 +23,7 @@ ARTIFACTS_DIR = HOME / "brain" / "artifacts"
 
 @dataclass
 class TaskResult:
+    task_index: int
     stage: str
     description: str
     tools: list[str]
@@ -30,11 +31,16 @@ class TaskResult:
     artifacts: list[str] = field(default_factory=list)
     ok: bool = True
     error: str = ""
+    criteria: list = field(default_factory=list)   # list[CriterionResult]
+    criteria_note: str = ""
 
     def to_dict(self) -> dict:
-        return {"stage": self.stage, "description": self.description, "tools": self.tools,
+        return {"task_index": self.task_index, "stage": self.stage,
+                "description": self.description, "tools": self.tools,
                 "output": self.output[:4000], "artifacts": self.artifacts,
-                "ok": self.ok, "error": self.error}
+                "ok": self.ok, "error": self.error,
+                "criteria": [c.to_dict() if hasattr(c, "to_dict") else c for c in self.criteria],
+                "criteria_note": self.criteria_note}
 
 
 ToolRunner = Callable[[str, dict], str]
@@ -74,12 +80,12 @@ def execute_plan(plan: BrainPlan, *, tool_runner: Optional[ToolRunner] = None,
         on_event("execute", f"running {len(batch)} task(s): "
                             f"{', '.join(t.stage for _, t in batch)}")
         if len(batch) == 1:
-            res = _run_task(batch[0][1], tool_runner, results, on_event)
+            res = _run_task(batch[0][0], batch[0][1], tool_runner, results, on_event)
             results.append(res)
             done_indices.add(batch[0][0])
         else:
             with ThreadPoolExecutor(max_workers=len(batch)) as pool:
-                futures = {pool.submit(_run_task, task, tool_runner, results, on_event): idx
+                futures = {pool.submit(_run_task, idx, task, tool_runner, results, on_event): idx
                            for idx, task in batch}
                 for fut in as_completed(futures):
                     idx = futures[fut]
@@ -90,11 +96,17 @@ def execute_plan(plan: BrainPlan, *, tool_runner: Optional[ToolRunner] = None,
     return results
 
 
-def _run_task(task: BrainTask, tool_runner: ToolRunner,
+def _run_task(task_index: int, task: BrainTask, tool_runner: ToolRunner,
               prior: list[TaskResult], on_event) -> TaskResult:
-    """Run every tool named for a task and merge outputs into one result."""
+    """Run every tool named for a task and merge outputs into one result.
+
+    Success is measured against criteria (not just 'ran without error'): after
+    the tools run, the applicable per-tool and per-stage criteria are evaluated
+    against the combined output. A task is only 'ok' if no criterion FAILED.
+    """
+    from . import criteria as crit_mod
     context = _prior_context(task, prior)
-    outputs, artifacts, errors = [], [], []
+    outputs, artifacts, errors, crit_results = [], [], [], []
     for tool in task.tools:
         on_event("tool", f"{task.stage}: {tool}")
         try:
@@ -102,20 +114,48 @@ def _run_task(task: BrainTask, tool_runner: ToolRunner,
             out = tool_runner(tool, args)
             outs = str(out)
             outputs.append(f"### {tool}\n{outs}")
-            arts = _extract_artifacts(outs, task)
+            from ..success import assess_tool_output
+            status, reason = assess_tool_output(outs)
+            empirical = crit_mod.evaluate_tool(
+                tool, outs, stage=task.stage, description=task.description)
+            # Prefer tool-specific empirical graders. The generic runtime grader is
+            # only decisive for hard errors or tools without a specific grader.
+            if status == "fail" or not empirical:
+                crit_results.append(crit_mod.CriterionResult(
+                    f"{tool}.contract_evidence", status, reason, outs[:200]))
+            crit_results.extend(empirical)
+            arts = _extract_artifacts(outs, task, tool=tool)
             artifacts.extend(arts)
         except Exception as e:
             errors.append(f"{tool}: {e}")
             outputs.append(f"### {tool}\nERROR: {e}")
+    output = "\n\n".join(outputs)
+    # Evaluate success criteria (platform-wide). This is what makes the Brain
+    # "remember and execute" real success rather than mere absence of errors.
+    ok, note = crit_mod.task_succeeded(crit_results)
+    # If a tool threw, that's also a failure regardless of criteria.
+    if errors:
+        ok = False
+        note = ("; ".join(errors) + (" | criteria: " + note if crit_results else "")).strip()
+    for r in crit_results:
+        on_event("criteria", f"{r.criterion_id}: {r.status} - {r.reason}")
     return TaskResult(
-        stage=task.stage, description=task.description, tools=task.tools,
-        output="\n\n".join(outputs), artifacts=artifacts,
-        ok=not errors, error="; ".join(errors))
+        task_index=task_index, stage=task.stage, description=task.description, tools=task.tools,
+        output=output, artifacts=artifacts, ok=ok, error="; ".join(errors),
+        criteria=crit_results, criteria_note=note)
+
+
+@dataclass
+class _BareResult:
+    """Minimal adapter so criteria checks see a result with .output + .stage."""
+    output: str
+    stage: str = ""
 
 
 def _prior_context(task: BrainTask, prior: list[TaskResult]) -> str:
     """Feed earlier task outputs into dependent tasks (chaining findings)."""
-    deps = [prior[d] for d in task.depends_on if 0 <= d < len(prior)]
+    by_index = {result.task_index: result for result in prior}
+    deps = [by_index[d] for d in task.depends_on if d in by_index]
     if not deps:
         return ""
     lines = ["Prior findings to build on:"]
@@ -124,7 +164,7 @@ def _prior_context(task: BrainTask, prior: list[TaskResult]) -> str:
     return "\n".join(lines)
 
 
-def _extract_artifacts(text: str, task: BrainTask) -> list[str]:
+def _extract_artifacts(text: str, task: BrainTask, *, tool: str = "") -> list[str]:
     """If a task produced capture/output files, persist them and link them.
 
     HONESTY: packet capture is only claimed when a real capture tool actually
@@ -137,14 +177,15 @@ def _extract_artifacts(text: str, task: BrainTask) -> list[str]:
     ensure_dirs()
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     links = []
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     is_capture_task = any(k in task.description.lower()
                           for k in ("packet", "capture", "pcap", "traffic"))
     if not is_capture_task:
         return links
 
     # Determine which capture tools were actually requested and available.
-    capture_tools = [t for t in task.tools
+    considered_tools = [tool] if tool else task.tools
+    capture_tools = [t for t in considered_tools
                      if _binary_name(t) in ("tshark", "tcpdump", "wireshark")]
     if not capture_tools:
         return links
@@ -170,7 +211,8 @@ def _extract_artifacts(text: str, task: BrainTask) -> list[str]:
         return links
     # Success: save a readable copy and link it.
     safe = "_".join(task.stage.split())
-    path = ARTIFACTS_DIR / f"{safe}_{stamp}.txt"
+    tool_name = _binary_name(tool) if tool else "capture"
+    path = ARTIFACTS_DIR / f"{safe}_{tool_name}_{stamp}.txt"
     path.write_text(text[:50000])
     links.append(f"file://{path}  (packet capture summary - open to view traffic)")
     return links
@@ -197,15 +239,29 @@ def _live_tool_runner(tool: str, args: dict) -> str:
         stage = tool.split("::", 1)[1]
         t = TOOL_REGISTRY.get("swarm.delegate")
         if t:
-            return str(t.fn(agent_name=stage, task=desc))
+            criteria = args.get("success_criteria") or (
+                "Return evidence for the task and label every result pass, fail, or uncertain.")
+            try:
+                return str(t.fn(agent_name=stage, task=desc, success_criteria=criteria))
+            except TypeError as exc:
+                # Backward compatibility for third-party delegates registered before
+                # success_criteria became part of the contract.
+                if "success_criteria" not in str(exc):
+                    raise
+                return str(t.fn(agent_name=stage, task=desc))
         return f"(swarm.delegate not registered; would delegate {stage}: {desc})"
-    # shadowdragon.run::xxx  ->  shadowdragon.run with the tool name
-    if tool.startswith("shadowdragon.run::"):
+    # shadowdragon.kali_run::xxx -> generic registered Kali runner.
+    if tool.startswith("shadowdragon.kali_run::"):
         binary = tool.split("::", 1)[1]
-        t = TOOL_REGISTRY.get("shadowdragon.run")
+        t = TOOL_REGISTRY.get("shadowdragon.kali_run")
         if t:
-            return str(t.fn(tool=binary, args=desc.split()))
-        return f"(shadowdragon.run not registered; would run {binary})"
+            return str(t.fn(name=binary, args=desc))
+        return f"ERROR: shadowdragon.kali_run not registered; could not run {binary}"
+    # brain.report is a deliberate internal compiler over prior evidence.
+    if tool == "brain.report":
+        if not context.strip():
+            return "ERROR: brain.report requires prior findings"
+        return f"# Compiled Brain report\n\n{context}\n\nRequested summary: {desc}"
     # platform.tool style -> call the registered tool with the task description
     t = TOOL_REGISTRY.get(tool)
     if t:
@@ -236,6 +292,12 @@ def compile_report(intent: str, plan: BrainPlan, results: list[TaskResult]) -> s
         lines.append(f"## {i}. {emoji} {display} {status}")
         lines.append(f"_{r.description}_")
         lines.append(f"**Tools:** {', '.join(r.tools)}")
+        if r.criteria_note:
+            lines.append(f"**Success criteria:** {r.criteria_note}")
+        if r.criteria:
+            for c in r.criteria:
+                mark = {"pass": "✅", "fail": "❌"}.get(c.status, "❔")
+                lines.append(f"  - {mark} `{c.status}` {c.criterion_id}: {c.reason}")
         lines.append("")
         lines.append(r.output[:2000])
         if r.artifacts:
@@ -249,4 +311,19 @@ def compile_report(intent: str, plan: BrainPlan, results: list[TaskResult]) -> s
         lines.append("---\n**All artifacts:**")
         for a in all_artifacts:
             lines.append(f"- {a}")
+    return "\n".join(lines)
+
+
+def append_stage_criteria(report: str, stage_evaluations: list[tuple]) -> str:
+    """Attach aggregate stage verdicts so no success decision is invisible."""
+    if not stage_evaluations:
+        return report
+    lines = [report, "", "# Aggregate stage success criteria", ""]
+    for stage, results, ok, note in stage_evaluations:
+        lines.append(f"## {stage}: {'✅ pass' if ok else '❌ not passed'}")
+        lines.append(note)
+        for result in results:
+            mark = {"pass": "✅", "fail": "❌"}.get(result.status, "❔")
+            lines.append(f"- {mark} `{result.status}` {result.criterion_id}: {result.reason}")
+        lines.append("")
     return "\n".join(lines)

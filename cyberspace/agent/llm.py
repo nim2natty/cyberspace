@@ -18,6 +18,8 @@ needs to fix the problem.
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -193,7 +195,10 @@ class AnthropicProvider(LLMProvider):
             "content-type": "application/json",
         }
         sys_msg = next((m["content"] for m in messages if m["role"] == "system"), "")
-        conv = _anthropic_messages([m for m in messages if m["role"] != "system"])
+        aliases = {tool.name: _anthropic_tool_name(tool.name) for tool in tools}
+        reverse_aliases = {alias: name for name, alias in aliases.items()}
+        conv = _anthropic_messages(
+            [m for m in messages if m["role"] != "system"], aliases)
         payload = {
             "model": self.cfg.model,
             "max_tokens": 2048,
@@ -203,7 +208,8 @@ class AnthropicProvider(LLMProvider):
         }
         if tools:
             payload["tools"] = [
-                {"name": t.name, "description": t.description, "input_schema": t.parameters}
+                {"name": aliases[t.name], "description": t.provider_description(),
+                 "input_schema": _object_schema(t.parameters)}
                 for t in tools
             ]
         r = self._post(url, payload, headers)
@@ -214,7 +220,8 @@ class AnthropicProvider(LLMProvider):
             if block["type"] == "text":
                 text += block["text"]
             elif block["type"] == "tool_use":
-                calls.append(ToolCall(name=block["name"], arguments=block.get("input", {}),
+                calls.append(ToolCall(name=reverse_aliases.get(block["name"], block["name"]),
+                                      arguments=block.get("input", {}),
                                       id=block.get("id", "")))
         return AgentResponse(text=text, tool_calls=calls, raw=data)
 
@@ -228,8 +235,28 @@ def _safe_json(s):
         return {}
 
 
-def _anthropic_messages(messages: list[dict]) -> list[dict]:
+def _anthropic_tool_name(name: str) -> str:
+    """Return a stable native-Anthropic tool name (letters/numbers/_/- only)."""
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    if safe == name and len(safe) <= 64:
+        return safe
+    digest = hashlib.sha256(name.encode()).hexdigest()[:8]
+    return f"{safe[:55]}_{digest}"[:64]
+
+
+def _object_schema(schema: object) -> dict:
+    """Normalize third-party schemas to Anthropic's required object shape."""
+    if not isinstance(schema, dict) or schema.get("type") != "object":
+        return {"type": "object", "properties": {}}
+    normalized = dict(schema)
+    if not isinstance(normalized.get("properties"), dict):
+        normalized["properties"] = {}
+    return normalized
+
+
+def _anthropic_messages(messages: list[dict], aliases: Optional[dict[str, str]] = None) -> list[dict]:
     """Translate the internal OpenAI-like tool transcript to Anthropic blocks."""
+    aliases = aliases or {}
     out = []
     for msg in messages:
         role = msg.get("role")
@@ -240,7 +267,7 @@ def _anthropic_messages(messages: list[dict]) -> list[dict]:
             for call in msg["tool_calls"]:
                 fn = call.get("function", {})
                 blocks.append({"type": "tool_use", "id": call.get("id", ""),
-                               "name": fn.get("name", ""),
+                               "name": aliases.get(fn.get("name", ""), fn.get("name", "")),
                                "input": _safe_json(fn.get("arguments", {}))})
             out.append({"role": "assistant", "content": blocks})
         elif role == "tool":

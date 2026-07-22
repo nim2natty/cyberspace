@@ -11,7 +11,7 @@ from typing import Callable, Optional
 
 from . import playbook
 from .planner import plan as build_brain_plan
-from .executor import execute_plan, compile_report
+from .executor import execute_plan, compile_report, append_stage_criteria
 
 
 def _on_noop(_s: str, _m: str) -> None:
@@ -72,22 +72,51 @@ def run(intent: str, *, confirm_install: Optional[Callable] = None,
     results = execute_plan(br_plan, tool_runner=tool_runner,
                            max_workers=max_workers, on_event=on_event)
 
-    # Compile + assess.
-    report = compile_report(intent, br_plan, results)
+    # Compile + assess. Overall success requires every task's per-tool criteria
+    # to pass AND every stage's aggregate criteria to pass (measured against the
+    # combined output of that stage, not each sub-task).
     plan_summary = f"{len(br_plan.tasks)} tasks, tools: {', '.join(all_tools)}"
-    success = all(r.ok for r in results) if results else False
+    tasks_ok = all(r.ok for r in results) if results else False
+    # Stage-level criteria against each stage's aggregated output.
+    from .criteria import evaluate_stage, task_succeeded as _task_ok
+    stage_notes = []
+    stages_seen = []
+    for r in results:
+        if r.stage not in stages_seen:
+            stages_seen.append(r.stage)
+    stage_ok = True
+    stage_evaluations = []
+    for stage in stages_seen:
+        combined = "\n\n".join(r.output for r in results if r.stage == stage)
+        stage_results = evaluate_stage(stage, combined)
+        ok, note = _task_ok(stage_results)
+        stage_evaluations.append((stage, stage_results, ok, note))
+        if not ok:
+            stage_ok = False
+            stage_notes.append(f"[{stage}] {note}")
+        for sr in stage_results:
+            on_event("criteria", f"[stage {stage}] {sr.criterion_id}: {sr.status} - {sr.reason}")
+    success = tasks_ok and stage_ok
+    report = append_stage_criteria(
+        compile_report(intent, br_plan, results), stage_evaluations)
     tools_used = sorted({t for task in br_plan.tasks for t in task.tools})
 
-    # Learn.
+    # Learn. Record per-task outcomes (criterion-based) so the playbook remembers
+    # what actually achieved success, not merely what ran.
     if learn:
-        for task in br_plan.tasks:
-            matching = [r for r in results if r.stage == task.stage]
-            outcome = matching[0].output[:200] if matching else "(no result)"
+        by_index = {result.task_index: result for result in results}
+        stage_passed = {stage: ok for stage, _results, ok, _note in stage_evaluations}
+        for task_index, task in enumerate(br_plan.tasks):
+            matching = by_index.get(task_index)
+            outcome = ((matching.criteria_note or matching.output[:160])
+                       if matching else "(no result)")
             playbook.record(playbook.PlaybookEntry(
                 intent=intent, stage=task.stage, tools=task.tools,
                 plan_summary=task.description, outcome=outcome,
-                success=matching[0].ok if matching else False,
-                artifacts=matching[0].artifacts if matching else []))
+                success=(matching.ok and stage_passed.get(task.stage, False)) if matching else False,
+                artifacts=matching.artifacts if matching else []))
+    if stage_notes:
+        on_event("criteria", "stage criteria: " + " | ".join(stage_notes))
     on_event("done", "brain operation complete" if success else "brain operation finished with errors")
     return BrainOutcome(intent=intent, report=report, plan_summary=plan_summary,
                         success=success, tools_used=tools_used)

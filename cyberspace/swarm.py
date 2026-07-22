@@ -18,6 +18,7 @@ system learns how the operator runs attacks and can cross-reference techniques.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -26,6 +27,7 @@ from rich.console import Console
 from .modules.base import TOOL_REGISTRY, Tool
 from .agent.llm import LLMConfig, get_provider, ProviderError, chat_with_failover
 from .agent.core import build_system_prompt
+from .success import assess_tool_output, tool_contract_text
 
 _CONSOLE = Console()
 
@@ -115,6 +117,25 @@ KILL_CHAIN: list[KillChainStage] = [
         tool_prefixes=["robodaddy"]),
 ]
 
+
+def _criterion_lines(value: str) -> list[str]:
+    return [line.strip().lstrip("-*0123456789. ").strip()
+            for line in re.split(r"[;\n]+", value or "")
+            if line.strip().lstrip("-*0123456789. ").strip()]
+
+
+def _verified_stage_result(result: str, criteria: str) -> tuple[bool, str]:
+    """Require a verdict and evidence marker for every delegated criterion."""
+    rows = _criterion_lines(criteria)
+    text = result or ""
+    verdicts = re.findall(r"(?im)\b(?:pass|fail|uncertain|not-tested)\b", text)
+    evidence = re.findall(r"(?im)\bevidence\s*:", text)
+    if rows and len(verdicts) >= len(rows) and len(evidence) >= len(rows):
+        return True, text
+    return False, ("STAGE UNCERTAIN: specialist response did not provide one explicit "
+                   "pass/fail/uncertain/not-tested verdict and evidence entry per criterion.\n"
+                   f"Criteria ({len(rows)}): {criteria}\nRaw response: {text or '(empty)'}")
+
 KILL_CHAIN_STAGES = [s.name for s in KILL_CHAIN]
 
 
@@ -198,6 +219,10 @@ When the user describes a goal in plain language, DO NOT ask them which tool or 
 to use. Map it to the correct kill chain stage and delegate. Run it. Explain results
 in plain language, stating WHICH STAGE of the kill chain you're in.
 
+Before delegating, make the objective's measurable acceptance criteria explicit.
+Pass those criteria to the specialist. Do not mark a stage complete merely because
+a tool ran: require evidence and a pass/fail/uncertain verdict for each criterion.
+
 ## Speed and coverage are critical
 Prefer FAST operations. For local-network inventory, use airbender.chain with the
 local-recon pipeline so independent discovery methods run concurrently and results are
@@ -225,19 +250,21 @@ class Swarm:
         self.current_stage = ""
 
     def _delegate_tool(self) -> Tool:
-        def _fn(agent_name="", task=""):
-            return self.delegate(agent_name, task)
+        def _fn(agent_name="", task="", success_criteria=""):
+            return self.delegate(agent_name, task, success_criteria)
         return Tool(name="swarm.delegate",
             description="Delegate a task to a Cyber Kill Chain stage. Stages: " +
             ", ".join(f"{s.name} ({s.display})" for s in KILL_CHAIN),
             parameters={"type": "object", "properties": {
                 "agent_name": {"type": "string", "description": "kill chain stage: " +
                  ", ".join(s.name for s in KILL_CHAIN)},
-                "task": {"type": "string", "description": "the specific task for this stage"}},
-                "required": ["agent_name", "task"]},
+                "task": {"type": "string", "description": "the specific task for this stage"},
+                 "success_criteria": {"type": "string", "description":
+                    "measurable acceptance criteria, one per line, including required evidence"}},
+                "required": ["agent_name", "task", "success_criteria"]},
             fn=_fn)
 
-    def delegate(self, stage_name: str, task: str) -> str:
+    def delegate(self, stage_name: str, task: str, success_criteria: str = "") -> str:
         """Delegate a task to the named kill chain stage specialist."""
         spec = get_stage(stage_name)
         if not spec:
@@ -248,8 +275,13 @@ class Swarm:
             f"\n  {spec.emoji} [bold yellow]STAGE {spec.phase}: {spec.display}[/bold yellow]")
         self.console.print(f"  [dim]Task: {task[:120]}[/dim]\n")
         tools = _scoped_tools(spec.tool_prefixes)
+        criteria = success_criteria.strip() or (
+            f"Complete this {spec.display} task in scope; return substantive evidence, "
+            "explicitly label pass/fail/uncertain, and disclose errors or untested items.")
+        delegated = (f"<task>{task}</task>\n<success_criteria>{criteria}</success_criteria>\n"
+                     "Verify every criterion against tool evidence before reporting completion.")
         messages = [{"role": "system", "content": build_system_prompt(spec.system_prompt)},
-                    {"role": "user", "content": task}]
+                    {"role": "user", "content": delegated}]
         try:
             resp = chat_with_failover(self.provider, messages, tools, self.console)
         except ProviderError as e:
@@ -274,6 +306,11 @@ class Swarm:
                         out = f"ERROR: {e}"
                 else:
                     out = f"ERROR: tool '{call.name}' not found."
+                if tool:
+                    status, reason = assess_tool_output(out)
+                    out += (f"\n\n[RUNTIME CHECK: {status.upper()} - {reason}]\n" +
+                            tool_contract_text(tool.name, tool.success_criteria,
+                                               tool.verification))
                 self.console.print(f"  [dim]↳ {call.name} returned {len(out)} characters[/dim]")
                 messages.append({"role": "tool", "name": call.name,
                                  "tool_call_id": call.id, "content": out})
@@ -283,9 +320,10 @@ class Swarm:
                 self.console.print(f"  [red]{spec.display} error: {e}[/red]")
                 return f"STAGE ERROR ({spec.display}): {e}"
             result = resp.text or result
-        result = result or f"({spec.display} complete)"
+        verified, result = _verified_stage_result(result, criteria)
         self.agent_logs[spec.name].append(f"Task: {task}\nResult: {result[:500]}")
-        self.console.print(f"  [dim]{spec.emoji} {spec.display} done[/dim]\n")
+        state = "verified" if verified else "uncertain"
+        self.console.print(f"  [dim]{spec.emoji} {spec.display} {state}[/dim]\n")
         # Record this stage's outcome in Actions on Objectives memory.
         self._record_objective(spec, task, result)
         return result[:4000]
@@ -328,7 +366,8 @@ class Swarm:
             for call in resp.tool_calls:
                 if call.name == "swarm.delegate":
                     result = self.delegate(call.arguments.get("agent_name", ""),
-                                           call.arguments.get("task", ""))
+                                           call.arguments.get("task", ""),
+                                           call.arguments.get("success_criteria", ""))
                 elif call.name == "project.search":
                     from .agent.core import _project_search
                     result = _project_search(call.arguments.get("query", ""))

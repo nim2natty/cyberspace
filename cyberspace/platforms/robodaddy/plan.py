@@ -34,6 +34,7 @@ class TrainingPlan:
     # User-designed parameters (see .parameters). system_prompt attunes training;
     # focus/guardrails describe how the model should behave once served.
     system_prompt: str = ""
+    success_criteria: list[str] = field(default_factory=list)
     focus: dict = field(default_factory=dict)
     guardrails: dict = field(default_factory=dict)
     extra_hyperparams: dict = field(default_factory=dict)
@@ -75,6 +76,12 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
     a system prompt composed from the cyber focus + guardrails. This is how the
     training process gets attuned to the model the user designed.
     """
+    if parameters is None or not parameters.success_criteria:
+        raise ValueError(
+            "RoboDaddy requires user-specified success criteria before planning. "
+            "Use the guided CLI or pass ModelParameters.success_criteria.")
+    from .prompt_guide import validate_success_criteria
+    parameters.success_criteria = validate_success_criteria(parameters.success_criteria)
     use_case = resolve_use_case(use_case)
     preset = preset_for(use_case)
 
@@ -82,6 +89,7 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
     # method, hyperparameters, and the composed system prompt).
     method = preset["method"]
     chosen_system_prompt = ""
+    success_criteria: list[str] = []
     focus_dict: dict = {}
     guardrails_dict: dict = {}
     extra_hp: dict = {}
@@ -100,6 +108,7 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
         else:
             ds = datasets_for(preset["datasets"])[0]["id"]
         chosen_system_prompt = build_system_prompt(parameters, preset_prompt=preset.get("system_prompt", ""))
+        success_criteria = list(parameters.success_criteria)
         focus_dict = parameters.focus.to_dict()
         guardrails_dict = parameters.guardrails.to_dict()
         extra_hp = {
@@ -184,6 +193,8 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
                      "composed from cyber focus + user guardrails.")
         if focus_dict and focus_dict.get("sensitive_content"):
             notes.append("sensitive-content handling enabled within the user's guardrails.")
+    if success_criteria:
+        notes.append(f"{len(success_criteria)} user-defined success criteria will drive evaluation.")
 
     return TrainingPlan(
         name=f"{_safe_name(base)}-{_safe_name(use_case)}-d{days}",
@@ -194,7 +205,7 @@ def build_plan(use_case: str, *, base_model: Optional[str] = None,
         max_seq_len=max_seq_len, lora_r=lora_r,
         days=days, samples=samples, hours=hours,
         cost_low=low, cost_mid=mid, cost_high=high, notes=notes,
-        system_prompt=chosen_system_prompt, focus=focus_dict,
+        system_prompt=chosen_system_prompt, success_criteria=success_criteria, focus=focus_dict,
         guardrails=guardrails_dict, extra_hyperparams=extra_hp,
     )
 

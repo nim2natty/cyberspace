@@ -39,6 +39,8 @@ from .recommend import (recommend_parameters, enhance_parameters,
                         heuristic_recommend)
 from .providers import PROVIDERS
 from .registry import list_keys, list_models, issue_key, revoke_key
+from .prompt_guide import (ANTHROPIC_PROMPT_GUIDE, criteria_prompt,
+                           parse_success_criteria, validate_success_criteria)
 
 
 def _print_dataset_table(console: Console, datasets: list[dict]) -> None:
@@ -78,6 +80,10 @@ def _print_parameters(console: Console, params) -> None:
     console.print(f"hyperparameters: {hp}")
     if params.dataset_ids:
         console.print(f"datasets: {', '.join(params.dataset_ids)}")
+    if params.success_criteria:
+        console.print("success criteria:")
+        for criterion in params.success_criteria:
+            console.print(f"  - {criterion}")
     f = params.focus
     enabled = [k for k in ("offensive_reasoning", "adversary_modeling", "attack_path_reasoning",
                 "multi_turn_scenarios", "sensitive_content", "foothold_analysis",
@@ -110,6 +116,8 @@ def _coerce_value(params, key: str, value: str):
 
 
 def _coerce_known(current, value: str):
+    if isinstance(current, list):
+        return parse_success_criteria(value)
     if isinstance(current, bool):
         return value.strip().lower() in ("1", "true", "yes", "y", "on")
     if isinstance(current, int):
@@ -123,6 +131,29 @@ def _coerce_known(current, value: str):
         except ValueError:
             return value
     return value
+
+
+def _collect_success_criteria(console: Console, existing=None) -> list[str]:
+    """Require model-level acceptance criteria before designing/training a model."""
+    console.print("\n[bold]Define success before tuning the model.[/bold]")
+    console.print("[dim]Use an observable outcome + evaluation + target, e.g. "
+                  "'At least 90% exact match on 100 held-out routing cases'.[/dim]")
+    default = "; ".join(existing or [])
+    while True:
+        raw = Prompt.ask(criteria_prompt(), default=default or None)
+        try:
+            return validate_success_criteria(raw)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red] Run `cyberspace robodaddy prompt-guide` for examples.")
+
+
+def _validate_cli_criteria(console: Console, values) -> list[str]:
+    """Validate option criteria and convert bad input into a clean CLI error."""
+    try:
+        return validate_success_criteria(list(values or []))
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red] See `cyberspace robodaddy prompt-guide`.")
+        raise typer.Exit(2)
 
 
 def _launch_plan(console: Console, plan, *, provider: str, offer: Optional[int]) -> None:
@@ -276,6 +307,8 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             use_case = Prompt.ask("What kind of AI do you want to build?", default="coding assistant")
         intent = Prompt.ask("What should this AI do, for whom, and what matters most?",
                             default=use_case)
+        params = parameter_profile("custom_blank")
+        params.success_criteria = _collect_success_criteria(console)
         uc = resolve_use_case(use_case + " " + intent)
         preset = preset_for(uc)
         console.print(f"\n[cyan]Searching live Hugging Face datasets for:[/cyan] {intent}")
@@ -296,9 +329,11 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         num_gpus = int(Prompt.ask("Number of GPUs", default="1"))
         bparams = BASE_MODELS[base]["billion"]
         gpu = best_value_gpu(bparams, preset["method"]) or "A100_40"
+        params.base_model = base
+        params.dataset_ids = [selected["id"]]
         plan = build_plan(uc, base_model=base, dataset_id=selected["id"],
                           dataset_revision=selected.get("revision", "main"), gpu=gpu,
-                          days=days, num_gpus=num_gpus)
+                          days=days, num_gpus=num_gpus, parameters=params)
         plan.notes.append(f"intent: {intent}")
         plan.notes.append(f"dataset source={selected.get('source', 'unknown')} "
                           f"revision={selected.get('revision', 'main')}")
@@ -435,6 +470,8 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         if not prompt_text:
             prompt_text = Prompt.ask("What do you want your AI to do?",
                 default="offensive pen security")
+        params = parameter_profile("custom_blank")
+        params.success_criteria = _collect_success_criteria(console)
         uc = resolve_use_case(prompt_text)
         preset = preset_for(uc)
         console.print(f"[green]matched use case:[/green] {preset['label']}  [dim]({uc})[/dim]")
@@ -468,8 +505,10 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         days = int(Prompt.ask("How many days to train?", default="1"))
         num_gpus = int(Prompt.ask("Number of GPUs", default="1"))
 
+        params.base_model = base
+        params.dataset_ids = [dataset_id]
         p = build_plan(uc, base_model=base, dataset_id=dataset_id, gpu=gpu,
-                       days=days, num_gpus=num_gpus)
+                       days=days, num_gpus=num_gpus, parameters=params)
         console.print(Panel.fit(
             f"[bold]{p.name}[/bold]\n"
             f"base: {p.base_model} ({BASE_MODELS[p.base_model]['billion']}B)   "
@@ -538,6 +577,7 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         intent = Prompt.ask("Describe what your robot should do (free text)",
                             default=("authorized red-team adversary emulation"
                                      if kind == "cyber" else "a helpful assistant"))
+        params.success_criteria = _collect_success_criteria(console, params.success_criteria)
 
         # STEP 3: pick dataset(s) from the latest cache (+ live + custom).
         console.print("\n[bold]Step 3:[/bold] pick your training data.")
@@ -574,6 +614,11 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             _print_search_results(console, datasets[:limit])
         else:
             console.print("[dim]still none - check your network and try again.[/dim]")
+
+    @app.command("prompt-guide")
+    def prompt_guide():
+        """Show Anthropic-derived guidance for precise, accurate prompts and evals."""
+        console.print(ANTHROPIC_PROMPT_GUIDE, markup=False)
 
     # --- design your own model (parameters + cyber/custom bots) ------------
     @app.command("parameters")
@@ -632,6 +677,8 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         provider: str = typer.Option("dry-run", "--provider", "-p", help="dry-run|vastai"),
         offer: Optional[int] = typer.Option(None, "--offer"),
         interactive: bool = typer.Option(True, "--interactive/--no-interactive"),
+        success_criterion: Optional[list[str]] = typer.Option(
+            None, "--success-criterion", "-s", help="required criterion; repeat as needed"),
     ):
         """Build a CYBER BOT for red-team / adversary emulation or defense.
 
@@ -643,6 +690,10 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         """
         prof_name = "cyber_redteam" if flavor.startswith("red") else "cyber_defensive"
         params = parameter_profile(prof_name)
+        supplied_criteria = (_validate_cli_criteria(console, success_criterion)
+                             if success_criterion else [])
+        if supplied_criteria:
+            params.success_criteria = supplied_criteria
         console.print(Panel.fit(
             f"[bold]{params.label}[/bold]\n"
             "Full attack-path reasoning, adversary modeling, and operator-inspired "
@@ -664,6 +715,7 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
                 "guardrails.guardrail_level": level,
                 "guardrails.authorization_confirmed": authorized,
             })
+            params.success_criteria = _collect_success_criteria(console, params.success_criteria)
             if dataset:
                 params.dataset_ids = [dataset]
             elif not params.dataset_ids:
@@ -690,6 +742,9 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
                                            default=params.base_model or "llama3.1-8b")
         elif dataset:
             params.dataset_ids = [dataset]
+        if not params.success_criteria:
+            console.print("[red]At least one --success-criterion is required in non-interactive mode.[/red]")
+            raise typer.Exit(2)
         save_parameters(params)
         uc = "cyber_redteam" if prof_name == "cyber_redteam" else "defensive_pentest"
         plan = build_plan(use_case or uc, parameters=params, days=days,
@@ -706,9 +761,18 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         provider: str = typer.Option("dry-run", "--provider", "-p", help="dry-run|vastai"),
         offer: Optional[int] = typer.Option(None, "--offer"),
         interactive: bool = typer.Option(True, "--interactive/--no-interactive"),
+        success_criterion: Optional[list[str]] = typer.Option(
+            None, "--success-criterion", "-s", help="required criterion; repeat as needed"),
     ):
         """Build a CUSTOM BOT with fully user-defined parameters - no limits."""
-        params = load_parameters() or parameter_profile("custom_blank")
+        # Interactive editing may resume a saved design. Non-interactive builds
+        # must be self-contained and may not inherit old acceptance criteria.
+        params = ((load_parameters() or parameter_profile("custom_blank"))
+                  if interactive else parameter_profile("custom_blank"))
+        supplied_criteria = (_validate_cli_criteria(console, success_criterion)
+                             if success_criterion else [])
+        if supplied_criteria:
+            params.success_criteria = supplied_criteria
         if interactive:
             console.print("[cyan]Custom bot builder[/cyan] - set any parameters you like.")
             console.print("[dim](run `cyberspace robodaddy parameters guide` for the full list)[/dim]\n")
@@ -726,11 +790,15 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             params.dataset_ids = [ds_input]
             params.system_prompt = Prompt.ask("Custom system prompt (blank = auto-compose)",
                                               default=params.system_prompt)
+            params.success_criteria = _collect_success_criteria(console, params.success_criteria)
         else:
             if dataset:
                 params.dataset_ids = [dataset]
             if base:
                 params.base_model = base
+        if not params.success_criteria:
+            console.print("[red]At least one --success-criterion is required in non-interactive mode.[/red]")
+            raise typer.Exit(2)
         save_parameters(params)
         plan = build_plan(use_case, parameters=params, days=days,
                           dataset_id=(params.dataset_ids[0] if params.dataset_ids else None))
@@ -749,15 +817,38 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
                                           help="dry-run|vastai"),
               foreground: bool = typer.Option(False, "--foreground",
                                                 help="keep this terminal attached"),
+              success_criterion: Optional[list[str]] = typer.Option(
+                  None, "--success-criterion", "-s",
+                  help="required measurable criterion; repeat for multiple criteria"),
               offer: Optional[list[int]] = typer.Option(
                   None, "--offer", help="Vast.ai offer id; repeat once per model for batches")):
         """Launch detached fine-tune jobs; use --foreground to keep the terminal attached."""
         if provider not in ("dry-run", "vastai"):
             console.print("[red]provider must be dry-run or vastai[/red]")
             raise typer.Exit(1)
+        criteria = (_validate_cli_criteria(console, success_criterion)
+                    if success_criterion else [])
+        if not criteria:
+            import sys
+            if sys.stdin.isatty():
+                criteria = _collect_success_criteria(console)
+            else:
+                console.print("[red]At least one --success-criterion is required.[/red] "
+                              "See `cyberspace robodaddy prompt-guide`.")
+                raise typer.Exit(2)
+        # Start from a fresh profile so a previous build cannot silently satisfy
+        # this run's criteria or override explicit CLI arguments.
+        params = parameter_profile("custom_blank")
+        params.success_criteria = criteria
+        if base:
+            params.base_model = base
+        if dataset:
+            params.dataset_ids = [dataset]
+        params.epochs = epochs
         plans = [
             build_plan(use_case, base_model=(base or None), dataset_id=(dataset or None),
-                       gpu=(gpu or None), days=days, num_gpus=num_gpus, epochs=epochs)
+                       gpu=(gpu or None), days=days, num_gpus=num_gpus, epochs=epochs,
+                       parameters=params)
             for use_case in use_cases
         ]
         dry = provider == "dry-run"
@@ -809,8 +900,9 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
                 f"hours: {m.stats.get('hours','n/a')}\n"
                 f"progress: {m.stats.get('progress_file','n/a')}\n"
                 f"vast: {m.stats.get('vast_console_url','n/a')}",
-                border_style="green" if m.status == "trained" else "yellow"))
-            if m.status == "trained":
+                border_style="green" if m.status == "served" else "yellow"))
+            if m.status == "trained-not-evaluated":
+                console.print("[yellow]Training is complete, but model success criteria remain not-tested.[/yellow]")
                 console.print(f"[dim]serve it: cyberspace robodaddy serve {m.name}[/dim]")
 
     # --- jobs + models ---------------------------------------------------
@@ -824,7 +916,8 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         t = Table("model", "status", "base", "end_loss", "samples", "hours", "$mid", "progress")
         for m in models:
             s = m.stats
-            display_status = "done" if m.status in ("trained", "served") else m.status
+            display_status = ("done-not-evaluated" if m.status == "trained-not-evaluated"
+                              else "done" if m.status == "served" else m.status)
             t.add_row(m.name, display_status, m.base_model,
                       str(s.get("end_loss", "-")), str(s.get("samples_trained", "-")),
                       str(s.get("hours", "-")), str(s.get("cost_mid", "-")),
@@ -847,12 +940,13 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
                 stats = model.stats
                 identity = stats.get("vast_instance_id") or stats.get("pid") or "-"
                 progress = stats.get("progress_file") or stats.get("log_file") or "-"
-                display_status = "done" if model.status in ("trained", "served") else model.status
+                display_status = ("done-not-evaluated" if model.status == "trained-not-evaluated"
+                                  else "done" if model.status == "served" else model.status)
                 t.add_row(model.name, display_status, str(stats.get("provider", "-")), str(identity),
                           str(stats.get("end_loss", "-")),
                           str(stats.get("cost_mid", stats.get("estimated_cost", "-"))), str(progress))
             console.print(t if models else "[dim]No jobs. Run: cyberspace robodaddy build[/dim]")
-            done = sum(model.status in ("trained", "served") for model in models)
+            done = sum(model.status in ("trained-not-evaluated", "served") for model in models)
             failed = sum(model.status == "failed" for model in models)
             active = sum(model.status in ("queued", "training") for model in models)
             console.print(f"[dim]{done} done · {active} active · {failed} failed[/dim]")
@@ -883,7 +977,8 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             console.print("[dim]no models yet.[/dim]"); return
         t = Table("name", "status", "base", "use_case", "endpoint")
         for m in ms:
-            t.add_row(m.name, m.status, m.base_model, m.use_case, m.endpoint or "-")
+            t.add_row(m.name, f"{m.status} / eval:{m.evaluation_status}",
+                      m.base_model, m.use_case, m.endpoint or "-")
         console.print(t)
 
     @app.command("serve")

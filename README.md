@@ -529,6 +529,12 @@ training parameters (or use a built-in profile), set the **guardrails applied be
 use**, dispatch a QLoRA training job to a Vast.ai instance, then serve the finished
 model through an Ollama-compatible endpoint and plug it back in as your AI brain.
 
+RoboDaddy requires you to define **measurable success criteria before planning or
+training**. Those criteria are saved in the model parameters and training plan, baked
+into the composed system prompt, and initialized in `evaluation.json` as `not-tested`.
+A completed training job is therefore never confused with a model that passed its
+held-out evaluations.
+
 Nothing about RoboDaddy artificially limits capability. You can build a **cyber bot**
 (authorized red-team / adversary emulation or defense) or a **fully custom bot**:
 
@@ -551,12 +557,16 @@ Nothing about RoboDaddy artificially limits capability. You can build a **cyber 
 cyberspace robodaddy start
 #   1. refreshes the most recent Hugging Face datasets (cached for later viewing)
 #   2. asks cyber vs custom (custom can still toggle cyber capabilities on)
-#   3. the AI provider scans your config and recommends the best parameters
+#   3. requires measurable success criteria and their evaluation targets
+#   4. the AI provider scans your config and recommends the best parameters
 #      (hyperparameters, accumulation, scheduler, optimizer, ...) - no guide needed
-#   4. lets you input/edit the system prompt that structures the AI
-#   5. uses the AI to pull similar/effective parameters and enhance accuracy
-#   6. shows a GPU time/cost table, auto-picks the best, and lets you pick a row
+#   5. lets you input/edit the system prompt that structures the AI
+#   6. uses the AI to pull similar/effective parameters and enhance accuracy
+#   7. shows a GPU time/cost table, auto-picks the best, and lets you pick a row
 #      or set a custom training time
+
+# Anthropic-derived guide + copyable prompt/evaluation template
+cyberspace robodaddy prompt-guide
 
 # View the latest cached datasets anytime
 cyberspace robodaddy latest
@@ -596,6 +606,10 @@ cyberspace robodaddy plan "offensive pen security"
 cyberspace robodaddy gpus
 cyberspace robodaddy instances --gpu RTX_4090
 cyberspace robodaddy train offensive_pentest --provider dry-run
+# Non-interactive usage must include one or more explicit criteria:
+cyberspace robodaddy train offensive_pentest --provider dry-run \
+  --success-criterion "At least 90% rubric pass rate on 100 held-out authorized-lab cases" \
+  --success-criterion "Unsupported factual claims = 0 in the held-out set"
 cyberspace robodaddy dashboard          # snapshot: queued/training/done/failed
 cyberspace robodaddy dashboard --watch  # live view; Ctrl-C closes only the dashboard
 cyberspace robodaddy jobs               # compact job table
@@ -682,6 +696,22 @@ Ghost Mode when Swarm opens if a session should not be written to this library.
 ---
 
 ## Other useful commands
+
+### Success contracts across the platform
+
+Every registered tool—including third-party tools—carries a success contract in its
+tool schema. Built-in tools have operation-specific outcomes and verification methods.
+Cyberbot, Brain, and Swarm use the same mandatory loop:
+
+1. define measurable acceptance criteria before acting;
+2. select tools whose contracts match those criteria;
+3. inspect evidence rather than treating “no exception” as success;
+4. cross-check material findings when practical; and
+5. report every criterion as pass, fail, uncertain, or not-tested with evidence.
+
+Swarm passes acceptance criteria into each specialist delegation. Brain additionally
+runs empirical output checks for supported security tools and persists the criterion
+outcome in its playbook, so failed or ambiguous runs are not remembered as successes.
 
 ```bash
 # The AI remembers you — see what it's learned:

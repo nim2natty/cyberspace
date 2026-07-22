@@ -25,13 +25,31 @@ class Tool:
     parameters: dict
     fn: Callable[..., Any]
     module: str = ""
+    success_criteria: list[str] = field(default_factory=list)
+    verification: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.success_criteria or not self.verification:
+            from ..success import contract_for_tool
+            criteria, verification = contract_for_tool(self.name, self.description)
+            self.success_criteria = self.success_criteria or criteria
+            self.verification = self.verification or verification
+
+    def provider_description(self) -> str:
+        """Return the same success-aware description for every LLM provider."""
+        from ..success import tool_contract_text
+        description = self.description
+        if self.success_criteria:
+            description += "\n\n" + tool_contract_text(
+                self.name, self.success_criteria, self.verification)
+        return description
 
     def to_openai(self) -> dict:
         return {
             "type": "function",
             "function": {
                 "name": self.name,
-                "description": self.description,
+                "description": self.provider_description(),
                 "parameters": self.parameters,
             },
         }
@@ -46,6 +64,11 @@ class ToolRegistry:
     def register(self, tool: Tool) -> None:
         if not tool.module:
             tool.module = tool.name.split(".")[0]
+        if not tool.success_criteria or not tool.verification:
+            from ..success import contract_for_tool
+            criteria, verification = contract_for_tool(tool.name, tool.description)
+            tool.success_criteria = tool.success_criteria or criteria
+            tool.verification = tool.verification or verification
         self._tools[tool.name] = tool
 
     def get(self, name: str) -> Optional[Tool]:
