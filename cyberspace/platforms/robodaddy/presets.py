@@ -8,11 +8,11 @@ from __future__ import annotations
 # Base models are real open-weight HF repos (param count drives GPU choice).
 BASE_MODELS = {
     "llama3.1-8b":  {"hf": "meta-llama/Llama-3.1-8B", "billion": 8,
-                     "license": "llama3.1", "note": "Strong general base, tool-capable."},
+                     "license": "llama3.1", "note": "General instruction base with tool-use support."},
     "llama3.1-70b": {"hf": "meta-llama/Llama-3.1-70B", "billion": 70,
                      "license": "llama3.1", "note": "Frontier-grade; needs H100/A100-80."},
     "qwen2.5-7b":   {"hf": "Qwen/Qwen2.5-7B", "billion": 7,
-                     "license": "apache-2.0", "note": "Great coder + multilingual."},
+                     "license": "apache-2.0", "note": "Code and multilingual instruction base."},
     "qwen2.5-14b":  {"hf": "Qwen/Qwen2.5-14B", "billion": 14,
                      "license": "apache-2.0", "note": "Quality/size sweet spot."},
     "mistral-7b":   {"hf": "mistralai/Mistral-7B-v0.3", "billion": 7,

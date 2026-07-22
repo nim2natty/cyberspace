@@ -93,21 +93,21 @@ def build_system_prompt(base: str = "") -> str:
         prompt = (base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL + context_block()
         from ..projects import context_block as project_context
         prompt += project_context()
-        # Surface the Brain (evolving backbone) + its learned playbook so the
-        # agent uses brain.run for complex multi-step objectives and leans on
+        # Surface Cyberdeck and its verified playbook so the
+        # agent uses cyberdeck.run for complex multi-step objectives and leans on
         # what previously worked.
         try:
-            from ..brain.playbook import stats as brain_stats
-            bs = brain_stats()
+            from ..cyberdeck.playbook import stats as cyberdeck_stats
+            bs = cyberdeck_stats()
             if bs["total"]:
                 prompt += (
-                    "\n\n## Brain (evolving backbone)\n"
-                    "For complex, multi-step security objectives, prefer the brain.run tool: "
+                    "\n\n## Cyberdeck orchestration\n"
+                    "For complex, multi-step security objectives, prefer the cyberdeck.run tool: "
                     "it plans a multi-tool Cyber Kill Chain operation, runs sub-tasks "
-                    "concurrently, compiles a comprehensive report, and learns the outcome. "
+                    "concurrently, compiles an evidence report, and records the outcome. "
                     f"Your playbook has {bs['total']} past operations "
                     f"({bs['successes']} ok) using: {', '.join(bs['tools_used'][:12])}. "
-                    "Use brain.recall to reuse what worked.")
+                    "Use cyberdeck.recall to reuse what worked.")
         except Exception:
             pass
         # Tell the agent about the active project and that it can auto-switch.
@@ -117,8 +117,8 @@ def build_system_prompt(base: str = "") -> str:
         prompt += (
             "\n\n## You choose the attack vector\n"
             "When the user describes a goal (e.g. 'check if my router is vulnerable' or "
-            "'scan that server'), DO NOT ask them which tool to use. Pick the best tool "
-            "or chain pipeline yourself based on what they described. Run it. Explain "
+            "'scan that server'), DO NOT ask them which tool to use. Select a registered "
+            "tool or chain whose scope and success contract match the request. Run it. Explain "
             "the results in plain language.\n\n"
             "## You manage projects\n"
             "If the user mentions a topic that matches an existing project (e.g. 'open "
@@ -139,6 +139,7 @@ class Agent:
         self.registry = registry
         self.console = console or Console()
         self.include_project_tools = include_project_tools
+        self.scope = scope or "agent"
         project_names = {tool.name for tool in _project_tools()} if include_project_tools else set()
         self.allowed_tools = frozenset({tool.name for tool in registry.all()} | project_names)
         system = build_system_prompt(cfg.system_prompt or DEFAULT_SYSTEM)
@@ -180,13 +181,19 @@ class Agent:
 
     def ask(self, prompt: str) -> str:
         """One user turn. Runs the tool loop until the LLM gives a final answer."""
+        from ..cyberdeck.prompts import record_prompt, complete_prompt
+        prompt_record = record_prompt(prompt, source=self.scope)
         # Project selection can change between turns; refresh its scoped memory.
         self.messages[0]["content"] = build_system_prompt(self.cfg.system_prompt or DEFAULT_SYSTEM)
         self.messages.append({"role": "user", "content": prompt})
 
         for _ in range(self.max_iterations):
-            resp: AgentResponse = chat_with_failover(
-                self.provider, self.messages, self.tools, self.console)
+            try:
+                resp: AgentResponse = chat_with_failover(
+                    self.provider, self.messages, self.tools, self.console)
+            except Exception as exc:
+                complete_prompt(prompt_record["sequence"], str(exc), status="failed")
+                raise
             self.messages.append(self._assistant_msg(resp))
 
             if not resp.tool_calls:
@@ -194,6 +201,7 @@ class Agent:
                 self.console.print(f"[green]cyberbot>[/green] {resp.text}")
                 # Save to the active project if one is set.
                 self._save_to_project(prompt, resp.text)
+                complete_prompt(prompt_record["sequence"], resp.text)
                 return resp.text
 
             for call in resp.tool_calls:
@@ -206,6 +214,7 @@ class Agent:
                 })
 
         self.console.print("[yellow](reached max tool iterations)[/yellow]")
+        complete_prompt(prompt_record["sequence"], "", status="incomplete")
         return ""
 
     def _save_to_project(self, prompt: str, response: str) -> None:

@@ -2,7 +2,7 @@
 
 Curated wrappers validate input and use the safe host runner (no shell
 injection). The generic kali_run lets cyberbot invoke ANY Kali tool by name,
-so ShadowDragon truly covers all non-networking Kali tools.
+so ShadowDragon can wrap any installed Kali binary via the generic runner.
 """
 from __future__ import annotations
 

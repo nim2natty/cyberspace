@@ -37,18 +37,20 @@ def show_team() -> None:
 
 
 def _choose_workspace() -> bool:
-    """Choose saved project memory or ephemeral Ghost Mode on every launch."""
+    """Choose project/outcome logging or Ghost Mode on every launch."""
     from .. import projects
     active, items = projects.get_active(), projects.list_projects()
     console.print("\n[bold]Prompt library[/bold]")
     if active:
         console.print(f"  active project: [green]{active}[/green]")
     console.print("  1) Save prompts to active project\n  2) View/open a project folder")
-    console.print("  3) Create a project folder\n  4) Ghost Mode (save nothing)")
+    console.print("  3) Create a project folder\n"
+                  "  4) Ghost Mode (no project copy or operation outcomes; Cyberdeck prompt ledger remains)")
     default = "1" if active else ("2" if items else "3")
     choice = Prompt.ask("Workspace mode", choices=["1", "2", "3", "4"], default=default)
     if choice == "4":
-        console.print("[yellow]Ghost Mode: prompts and outcomes will not be saved.[/yellow]")
+        console.print("[yellow]Ghost Mode: project copies and operation outcomes are disabled. "
+                      "The ordered Cyberdeck prompt ledger is still saved.[/yellow]")
         return True
     if choice == "3":
         projects.create(Prompt.ask("New project name"), Prompt.ask("Description", default=""))
@@ -86,10 +88,10 @@ def run_swarm() -> None:
     from ..swarm import Swarm
     if not is_configured():
         console.print(Panel.fit(
-            "[red]No AI brain connected yet.[/red]\n\n"
+            "[red]No AI provider configured.[/red]\n\n"
             "The swarm needs an LLM to think. Connect one first:\n"
             "  [cyan]cyberspace setup[/cyan]\n\n"
-            "[dim]Pick any provider (local Ollama, OpenAI, Claude, z.ai, DeepSeek, "
+            "[dim]Pick a provider (local Ollama, OpenAI, Claude, z.ai, DeepSeek, "
             "Groq, Gemini, ...) - it only takes a key.[/dim]",
             border_style="red"))
         return
@@ -99,7 +101,7 @@ def run_swarm() -> None:
     except Exception as e:
         console.print(Panel.fit(
             f"[red]Could not start the swarm:[/red] {e}\n\n"
-            "[dim]Run `cyberspace setup --force` to reconfigure your AI brain.[/dim]",
+            "[dim]Run `cyberspace setup --force` to reconfigure the AI provider.[/dim]",
             border_style="red"))
         return
     console.print(Panel.fit(
@@ -133,7 +135,7 @@ def run_single_agent() -> None:
     from ..agent.llm import ProviderError
     if not is_configured():
         console.print(Panel.fit(
-            "[red]No AI brain connected yet.[/red]\n\n"
+            "[red]No AI provider configured.[/red]\n\n"
             "Run [cyan]cyberspace setup[/cyan] to connect an LLM first.",
             border_style="red"))
         return

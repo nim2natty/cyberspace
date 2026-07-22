@@ -1,8 +1,8 @@
-"""Multi-threaded execution + comprehensive report compilation.
+"""Multi-threaded execution and evidence-report compilation.
 
-The executor runs the Brain's plan: tasks with no dependencies run concurrently
-via swarm delegates (or direct tool calls) in a thread pool, so independent
-methods cross-check in parallel for the most comprehensive picture. Results are
+The executor runs the Cyberdeck's plan: tasks with no dependencies run concurrently
+through registered tool calls in a thread pool, so independent
+methods cross-check in parallel. Results are
 collected and compiled into one report with links to artifacts (e.g. packet
 captures saved as files the operator can open).
 """
@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..config import HOME, ensure_dirs
-from .planner import BrainPlan, BrainTask
+from .planner import CyberdeckPlan, CyberdeckTask
 
-ARTIFACTS_DIR = HOME / "brain" / "artifacts"
+ARTIFACTS_DIR = HOME / "cyberdeck" / "artifacts"
 
 
 @dataclass
@@ -50,13 +50,13 @@ def _noop_tool_runner(tool: str, args: dict) -> str:
     return f"(tool {tool} not executed in this context)"
 
 
-def execute_plan(plan: BrainPlan, *, tool_runner: Optional[ToolRunner] = None,
+def execute_plan(plan: CyberdeckPlan, *, tool_runner: Optional[ToolRunner] = None,
                  max_workers: int = 4,
                  on_event: Optional[Callable[[str, str], None]] = None) -> list[TaskResult]:
     """Execute a plan concurrently where tasks are independent.
 
     ``tool_runner`` maps a tool name + args to a string result. In the live CLI
-    it dispatches to swarm delegates / the registered tools; in tests it can be
+    it dispatches to registered tools; in tests it can be
     a stub. Returns results in execution order.
     """
     tool_runner = tool_runner or _live_tool_runner
@@ -96,7 +96,7 @@ def execute_plan(plan: BrainPlan, *, tool_runner: Optional[ToolRunner] = None,
     return results
 
 
-def _run_task(task_index: int, task: BrainTask, tool_runner: ToolRunner,
+def _run_task(task_index: int, task: CyberdeckTask, tool_runner: ToolRunner,
               prior: list[TaskResult], on_event) -> TaskResult:
     """Run every tool named for a task and merge outputs into one result.
 
@@ -130,7 +130,7 @@ def _run_task(task_index: int, task: BrainTask, tool_runner: ToolRunner,
             errors.append(f"{tool}: {e}")
             outputs.append(f"### {tool}\nERROR: {e}")
     output = "\n\n".join(outputs)
-    # Evaluate success criteria (platform-wide). This is what makes the Brain
+    # Evaluate success criteria (platform-wide). This is what makes the Cyberdeck
     # "remember and execute" real success rather than mere absence of errors.
     ok, note = crit_mod.task_succeeded(crit_results)
     # If a tool threw, that's also a failure regardless of criteria.
@@ -152,7 +152,7 @@ class _BareResult:
     stage: str = ""
 
 
-def _prior_context(task: BrainTask, prior: list[TaskResult]) -> str:
+def _prior_context(task: CyberdeckTask, prior: list[TaskResult]) -> str:
     """Feed earlier task outputs into dependent tasks (chaining findings)."""
     by_index = {result.task_index: result for result in prior}
     deps = [by_index[d] for d in task.depends_on if d in by_index]
@@ -164,7 +164,7 @@ def _prior_context(task: BrainTask, prior: list[TaskResult]) -> str:
     return "\n".join(lines)
 
 
-def _extract_artifacts(text: str, task: BrainTask, *, tool: str = "") -> list[str]:
+def _extract_artifacts(text: str, task: CyberdeckTask, *, tool: str = "") -> list[str]:
     """If a task produced capture/output files, persist them and link them.
 
     HONESTY: packet capture is only claimed when a real capture tool actually
@@ -194,7 +194,7 @@ def _extract_artifacts(text: str, task: BrainTask, *, tool: str = "") -> list[st
         links.append(
             f"(no capture tool available - tshark/tcpdump not installed; "
             "packet visibility was NOT possible for this task. "
-            "Install one with: cyberspace brain acquire tshark)")
+            "Install one with: cyberspace cyberdeck acquire tshark)")
         return links
     # The tool ran; check the output actually indicates capture succeeded.
     lower = text.lower()
@@ -226,30 +226,12 @@ def _binary_name(tool_ref: str) -> str:
 def _live_tool_runner(tool: str, args: dict) -> str:
     """Dispatch a plan tool to the live swarm/tools when running for real.
 
-    The Brain feeds every platform: a stage can be delegated to the Swarm as a
-    stage-scoped work unit (swarm.delegate), or a specific tool can be called
-    directly. This is how the Brain drives airbender/shadowdragon/stickem/iceberg
-    and the swarm in one coherent operation.
+    Cyberdeck calls registered AirBender, ShadowDragon, StickEm, Iceberg, RoboDaddy,
+    and Cyberdeck tools. Swarm maintains its own specialist-delegation loop.
     """
     from ..modules.base import TOOL_REGISTRY
     context = args.get("context", "")
     desc = args.get("task", "")
-    # swarm.delegate::<stage>  ->  delegate the whole stage to that kill-chain stage
-    if tool.startswith("swarm.delegate::"):
-        stage = tool.split("::", 1)[1]
-        t = TOOL_REGISTRY.get("swarm.delegate")
-        if t:
-            criteria = args.get("success_criteria") or (
-                "Return evidence for the task and label every result pass, fail, or uncertain.")
-            try:
-                return str(t.fn(agent_name=stage, task=desc, success_criteria=criteria))
-            except TypeError as exc:
-                # Backward compatibility for third-party delegates registered before
-                # success_criteria became part of the contract.
-                if "success_criteria" not in str(exc):
-                    raise
-                return str(t.fn(agent_name=stage, task=desc))
-        return f"(swarm.delegate not registered; would delegate {stage}: {desc})"
     # shadowdragon.kali_run::xxx -> generic registered Kali runner.
     if tool.startswith("shadowdragon.kali_run::"):
         binary = tool.split("::", 1)[1]
@@ -257,11 +239,11 @@ def _live_tool_runner(tool: str, args: dict) -> str:
         if t:
             return str(t.fn(name=binary, args=desc))
         return f"ERROR: shadowdragon.kali_run not registered; could not run {binary}"
-    # brain.report is a deliberate internal compiler over prior evidence.
-    if tool == "brain.report":
+    # cyberdeck.report is a deliberate internal compiler over prior evidence.
+    if tool == "cyberdeck.report":
         if not context.strip():
-            return "ERROR: brain.report requires prior findings"
-        return f"# Compiled Brain report\n\n{context}\n\nRequested summary: {desc}"
+            return "ERROR: cyberdeck.report requires prior findings"
+        return f"# Compiled Cyberdeck report\n\n{context}\n\nRequested summary: {desc}"
     # platform.tool style -> call the registered tool with the task description
     t = TOOL_REGISTRY.get(tool)
     if t:
@@ -276,10 +258,10 @@ def _live_tool_runner(tool: str, args: dict) -> str:
     return f"(tool '{tool}' not found in registry)"
 
 
-def compile_report(intent: str, plan: BrainPlan, results: list[TaskResult]) -> str:
-    """Compile all task results into one comprehensive, user-friendly report."""
+def compile_report(intent: str, plan: CyberdeckPlan, results: list[TaskResult]) -> str:
+    """Compile task outputs, criteria, and artifacts into one report."""
     from ..swarm import get_stage
-    lines = [f"# Brain report: {intent}", ""]
+    lines = [f"# Cyberdeck report: {intent}", ""]
     lines.append(f"Objective mapped to Kill Chain stage: **{plan.detected_stage}**")
     lines.append(f"Tasks executed: {len(results)}  |  Tools used: "
                  f"{', '.join(sorted({t for r in results for t in r.tools}))}")

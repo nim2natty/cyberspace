@@ -28,8 +28,8 @@ console = Console()
 
 def _banner() -> None:
     console.print(Panel.fit(
-        "[bold cyan]cyberspace[/bold cyan] - connect your AI brain\n"
-        "[dim]Pick any LLM (local, OpenAI, Claude, z.ai, DeepSeek, Groq, "
+        "[bold cyan]cyberspace[/bold cyan] - configure an AI provider\n"
+        "[dim]Pick an LLM (local, OpenAI, Claude, z.ai, DeepSeek, Groq, "
         "Gemini, a model you trained, ...) and we'll wire it up. Every platform "
         "(IceBerg, AirBender, ShadowDragon, StickEm, RoboDaddy) plugs into this.[/dim]",
         border_style="cyan",
@@ -138,7 +138,7 @@ def run_wizard(force: bool = False) -> LLMConfig:
     _banner()
 
     # 1) pick provider from the catalog
-    t = Table("#", "provider", "key?", "best for", title="Available LLMs")
+    t = Table("#", "provider", "key?", "runtime/use", title="Available LLMs")
     for i, spec in enumerate(all_specs(), 1):
         keycol = "no" if not spec.needs_key else "yes"
         t.add_row(str(i), spec.display, keycol, spec.note)

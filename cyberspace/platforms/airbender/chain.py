@@ -1,6 +1,6 @@
-"""AirBender super-tool: expanded networking catalog + chain engine.
+"""AirBender chain engine: pipelines over registered networking tools.
 
-Merges ALL networking tools under one CLI with interlinked commands. Each step's
+Chains registered networking tools under one CLI. Each step's
 output feeds the next, so the user (or AI) can run pipelines like:
   ping-sweep -> nmap top-ports -> service-detect
 in one command. Every tool records to memory for personalization.

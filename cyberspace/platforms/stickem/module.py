@@ -1,4 +1,4 @@
-"""StickEm module - the ESP32 Marauder + FT232 + Router super-tool.
+"""StickEm module: ESP32 Marauder, FT232 serial, and OpenWrt router control.
 
 Exposes a unified CLI (`cyberspace stickem ...`) and agent tools so cyberbot can
 drive ALL three hardware interfaces in one conversation: ESP32 (wireless attacks),
@@ -121,7 +121,7 @@ class StickEmModule(Module):
         return ModuleInfo(
             name="stickem", display_name="StickEm", version="0.1.0",
             emoji="\U0001f50c",
-            description="Super-tool: ESP32 + FT232 + OpenWrt router, unified hardware control.",
+            description="ESP32 Marauder, FT232 serial console, and OpenWrt router control.",
             requires_tools=["pyserial"],
         )
 

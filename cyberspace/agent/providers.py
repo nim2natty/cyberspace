@@ -38,7 +38,7 @@ CATALOG: list[ProviderSpec] = [
         "ollama", "Ollama (local, free, offline)", "ollama",
         base_url=DEFAULT_OLLAMA_URL, needs_key=False, local=True,
         models=["llama3.1:8b", "qwen2.5-coder:7b", "mistral-nemo:7b", "phi3:mini"],
-        note="Best for the cyberdeck / Pi. Runs on your own hardware."),
+        note="Runs locally and can be used on lower-resource hosts such as a Raspberry Pi."),
     ProviderSpec(
         "openai", "OpenAI (GPT)", "openai", base_url="https://api.openai.com/v1",
         key_url="https://platform.openai.com/api-keys", env_key="OPENAI_API_KEY",
@@ -58,13 +58,13 @@ CATALOG: list[ProviderSpec] = [
         "deepseek", "DeepSeek", "openai", base_url="https://api.deepseek.com",
         key_url="https://platform.deepseek.com/api_keys", env_key="DEEPSEEK_API_KEY",
         models=["deepseek-chat", "deepseek-reasoner"],
-        note="Great-value reasoning models. OpenAI-compatible."),
+        note="Hosted reasoning models through an OpenAI-compatible API."),
     ProviderSpec(
         "groq", "Groq (fast LPU)", "openai", base_url="https://api.groq.com/openai/v1",
         key_url="https://console.groq.com/keys", env_key="GROQ_API_KEY",
         models=["openai/gpt-oss-120b", "openai/gpt-oss-20b",
                 "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
-        note="Extremely fast inference (gpt-oss, llama). OpenAI-compatible."),
+        note="Hosted gpt-oss and Llama models through an OpenAI-compatible API."),
     ProviderSpec(
         "openrouter", "OpenRouter (gateway to 100s of models)", "openai",
         base_url="https://openrouter.ai/api/v1", key_url="https://openrouter.ai/keys",

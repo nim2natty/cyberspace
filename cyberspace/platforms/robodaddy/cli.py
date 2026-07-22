@@ -764,7 +764,7 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
         success_criterion: Optional[list[str]] = typer.Option(
             None, "--success-criterion", "-s", help="required criterion; repeat as needed"),
     ):
-        """Build a CUSTOM BOT with fully user-defined parameters - no limits."""
+        """Build a custom bot with user-defined supported parameters."""
         # Interactive editing may resume a saved design. Non-interactive builds
         # must be self-contained and may not inherit old acceptance criteria.
         params = ((load_parameters() or parameter_profile("custom_blank"))
@@ -785,7 +785,7 @@ def build_robodaddy_cli(console: Console) -> typer.Typer:
             params.batch_size = int(Prompt.ask("batch_size", default=str(params.batch_size or 4)))
             params.max_seq_len = int(Prompt.ask("max_seq_len", default=str(params.max_seq_len or 2048)))
             params.lora_r = int(Prompt.ask("lora_r", default=str(params.lora_r or 16)))
-            ds_input = dataset or Prompt.ask("Hugging Face dataset repo id (owner/name) - pick anything",
+            ds_input = dataset or Prompt.ask("Hugging Face dataset repo id (owner/name)",
                                              default="tatsu-lab/alpaca")
             params.dataset_ids = [ds_input]
             params.system_prompt = Prompt.ask("Custom system prompt (blank = auto-compose)",

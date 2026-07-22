@@ -2,14 +2,14 @@
 
 RoboDaddy lets you design a model with a full set of parameters and then fine-tune
 an open-weights base on a dataset you pick. You can browse Hugging Face data
-(curated catalog + live discovery) and pick ANY dataset on the Hub, set your own
+(curated catalog + live discovery) and enter a Hugging Face dataset repo id, set your own
 training parameters (or use the built-in profiles), set the guardrails that are
 applied before the model is used, dispatch a QLoRA training job to a Vast.ai
 instance, then serve the finished model through an Ollama-compatible endpoint and
 configure it as cyberspace's custom provider.
 
 Build a CYBER BOT (authorized red-team / adversary emulation or defense) or a
-fully CUSTOM BOT with whatever parameters you choose - nothing is artificially
+custom BOT with user-defined supported parameters.
 limited. The cyber profile attunes training to full offensive reasoning,
 realistic adversary modeling, and attack-path reasoning: analyze footholds,
 explore exploitability, chain findings, and reason through full multi-step attack
@@ -26,7 +26,7 @@ red-team operations and deep defensive workflows with accuracy.
   parameters view/set/reset the full model-design parameters (hyperparameters,
              cyber focus, guardrails) and get a built-in guide
   cyber      build a cyber bot (red-team/adversary emulation or defense)
-  custom     build a custom bot with fully user-defined parameters - no limits
+  custom     build a custom bot with user-defined supported parameters
   usecases   see use-case presets -> recommended data + model + GPU
   build      guided intent -> live data -> GPU/price -> confirmed background training
   plan       advanced interactive planning without launch

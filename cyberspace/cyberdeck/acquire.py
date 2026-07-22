@@ -1,6 +1,6 @@
 """Tool acquisition: discover missing software and install it (confirmed).
 
-When the Brain's plan needs a tool that is not on the host, this layer finds it:
+When the Cyberdeck's plan needs a tool that is not on the host, this layer finds it:
 first in the local catalogs (ShadowDragon's Kali overlay, AirBender's networking
 set), then via the full web through Iceberg's bright/dark search. Candidates are
 shown to the operator, and installation only ever happens from an OFFICIAL

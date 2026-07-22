@@ -1,4 +1,4 @@
-"""cyberspace - an open-source agentic pentest platform.
+"""cyberspace - authorized security tools with scoped AI modes and model-training commands.
 
 A modular, agent-first platform layered on top of Kali Linux for learning and
 practicing penetration testing. The cyberbot agent (any LLM of your choice)

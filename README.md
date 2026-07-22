@@ -12,24 +12,28 @@
 
 ## What is cyberspace?
 
-**cyberspace is the brain for your cyberdeck.**
+cyberspace is an open-source, AI-assisted cybersecurity tool for authorized security
+testing on Linux, macOS, Windows, and Raspberry Pi. It provides:
 
-A cyberdeck is a portable, custom-built hacking computer. cyberspace is the
-software that runs on it — an AI assistant that talks to you in plain English and
-does the work of an entire security team.
+- a Cyber Kill Chain workspace that routes security objectives to stage-scoped tools;
+- AirBender network discovery and service enumeration;
+- ShadowDragon web, credential, exploit-search, and Kali-tool execution;
+- Iceberg privacy checks and isolated browser profiles;
+- StickEm ESP32, serial, and OpenWrt control;
+- RoboDaddy dataset selection, fine-tuning plans, background jobs, model serving,
+  and criterion-based evaluation records; and
+- Cyberdeck multi-tool planning, evidence checks, reports, operation history, and an
+  ordered ledger of user prompts.
 
-You tell it what you want to do (for example: *"scan my home network and tell me
-what's vulnerable"*). It figures out which tools to use, runs them, and explains
-the results in a way you can understand — even if you're not a security expert.
-
-> **Built for:** the cyberdeck you're manufacturing. It runs on a Raspberry Pi 5,
-> a laptop, or anything that runs Linux, macOS, or Windows.
+The software exposes these functions through direct CLI commands, scoped AI modes,
+and a separate Swarm workspace. Host commands, provider requests, and paid training remain
+bounded by their existing confirmation, scope, credential, and success-criteria checks.
 
 ## How it works: one Cyber Kill Chain workspace
 
-Cyberspace organizes every request with the seven chronological stages of the
-Cyber Kill Chain. Describe the objective in plain language; Cyberspace identifies the
-relevant stage, selects scoped tools, shows each action, and reports in that stage's language.
+Cyberspace organizes requests with the seven chronological stages of the Cyber Kill Chain.
+Submit a security objective; Cyberspace identifies the relevant stage, selects
+registered scoped tools, shows each action, and returns the tool evidence and verdicts.
 
 | Stage | What Cyberspace does |
 |---|---|
@@ -49,13 +53,15 @@ you → Reconnaissance → Weaponization → Delivery → Exploitation
 A request need not traverse every stage. Cyberspace enters the matching stage while
 retaining chronological context from earlier work in the active project.
 
-### A prompt library, or no trace
+### Prompt and project records
 
 Running `cyberspace` opens the workspace. Every Swarm launch asks whether to continue
 saving into the active project, view/open a project folder, create one, or enter
-**Ghost Mode**, which saves neither prompts nor outcomes. Recent project entries become
-bounded **Actions-on-Objectives memory**, allowing earlier findings to be cross-referenced
-without mixing separate engagements.
+**Ghost Mode**, which disables project and operation-outcome logging. Cyberdeck still
+records each user prompt in sequence so it can be retrieved with
+`cyberspace cyberdeck prompts`; each record contains its source, project if present,
+timestamp, label, completion status, and response. A leading `[label: name]` is preserved
+as the label; otherwise Cyberdeck derives one from the prompt text.
 
 ### Visible execution and resilient models
 
@@ -153,14 +159,14 @@ without configuring anything:
 cyberspace providers        # list every LLM you can connect
 ```
 
-| # | Provider | Style | Key? | Best for |
+| # | Provider | API style | Key? | Runtime location/use |
 |---|---|---|---|---|
-| 1 | **Ollama** | native | no | local, free, offline (great for the Pi) |
-| 2 | **OpenAI** (GPT) | openai-compat | yes | strong, reliable tool-calling |
-| 3 | **Anthropic** (Claude) | native | yes | excellent reasoning |
+| 1 | **Ollama** | native | no | local process; supports offline use after model download |
+| 2 | **OpenAI** (GPT) | openai-compat | yes | hosted API with function calling |
+| 3 | **Anthropic** (Claude) | native | yes | hosted Messages API with tool use |
 | 4 | **z.ai** (GLM) | openai-compat | yes | GLM 5.2 with function calling |
-| 5 | **DeepSeek** | openai-compat | yes | great-value reasoning models |
-| 6 | **Groq** | openai-compat | yes | extremely fast inference |
+| 5 | **DeepSeek** | openai-compat | yes | hosted OpenAI-compatible models |
+| 6 | **Groq** | openai-compat | yes | hosted OpenAI-compatible inference |
 | 7 | **OpenRouter** | openai-compat | yes | one key → OpenAI/Claude/Gemini/Llama/free |
 | 8 | **Together AI** | openai-compat | yes | hosted open models |
 | 9 | **Mistral** | openai-compat | yes | — |
@@ -183,7 +189,7 @@ cyberspace                  # open the workspace
 
 ### Use a model you trained with RoboDaddy
 
-Train a model with RoboDaddy, serve it locally, then connect it as your AI brain:
+Train a model with RoboDaddy, serve it locally, then connect it as your AI cyberdeck:
 
 ```bash
 cyberspace robodaddy plan "offensive pent security"
@@ -203,7 +209,7 @@ cyberspace
 ```
 
 This opens the workspace. Choose **Swarm mode**, select a saved project or Ghost Mode,
-then type what you want in plain English:
+then enter a security objective for stage detection and scoped tool selection:
 
 ```
 cyberspace objective> scan 192.168.1.0/24, find web apps, test them, then write a report
@@ -218,33 +224,39 @@ system directly from the command line.
 
 ---
 
-## The Brain 🧠 — the evolving orchestration backbone
+## Cyberdeck — prompt records and multi-tool orchestration
 
-The Brain is cyberspace's flagship layer. It sits **above** the platforms and
-turns one plain-language objective into a coordinated, multi-tool operation
-organized by the Cyber Kill Chain. Instead of stopping at the first matching
-command, it selects **multiple complementary tools** (active discovery, service
-enumeration, passive packet observation, evidence correlation), runs them
-concurrently, compiles a single evidence report, and **learns** from each
-outcome so your instance keeps getting sharper — all within your authorized scope.
+Cyberdeck maps an objective to Cyber Kill Chain tasks, selects registered tools,
+resolves missing host dependencies through reviewed package-manager candidates,
+runs dependency-ready tasks concurrently, evaluates per-tool and per-stage evidence,
+and compiles an artifact-linked report. Verified task outcomes are stored in a
+project-scoped playbook and used as bounded context for later plans.
 
-The Brain **feeds every platform**: Swarm (parallel, stage-scoped work units),
-AirBender, ShadowDragon, StickEm, and Iceberg.
+Cyberdeck calls registered AirBender, ShadowDragon, StickEm, Iceberg, and RoboDaddy
+tools. Swarm provides a separate specialist-delegation loop. Neither path grants
+itself elevated privileges.
 
 ```bash
 # Plan a multi-tool operation (shows the Kill Chain plan without running it)
-cyberspace brain plan "find devices on this network and view their traffic"
+cyberspace cyberdeck plan "find devices on this network and view their traffic"
 
 # Run the full pipeline: plan -> acquire missing software -> concurrent
-# execution -> comprehensive report -> learn the outcome
-cyberspace brain run "find devices on this network"
+# execution -> evidence report -> record the outcome
+cyberspace cyberdeck run "find devices on this network"
 
-# See what the Brain has learned (what worked / failed before)
-cyberspace brain stats
-cyberspace brain recall "devices"
+# See what the Cyberdeck has learned (what worked / failed before)
+cyberspace cyberdeck stats
+cyberspace cyberdeck recall "devices"
+
+# Access prompts in insertion order, search them, inspect one, or change its label
+cyberspace cyberdeck prompts
+cyberspace cyberdeck prompts --query router
+cyberspace cyberdeck prompts --label home-lab
+cyberspace cyberdeck prompt 12
+cyberspace cyberdeck label 12 home-lab
 ```
 
-What the Brain does, concretely:
+Cyberdeck functions:
 
 1. **Capability planning** — translates your objective into Kill Chain stages and
    picks several tools per stage (e.g. for *find devices*: ping-sweep + nmap +
@@ -258,16 +270,16 @@ What the Brain does, concretely:
    unavailable, scoped to the active project so unrelated engagements never mix.
    Obvious secrets are scrubbed before anything is persisted. That history is fed
    back as bounded context to improve later plans.
-4. **Multi-agent execution** — Swarm breaks the objective into parallel,
-   stage-scoped work units; independent methods run concurrently and outputs are
-   reconciled into one evidence/report model.
+4. **Concurrent execution** — Cyberdeck runs dependency-ready tool tasks in a thread
+   pool, carries dependency output forward, and combines outputs in one report.
 5. **User-friendly network evidence** — goes beyond nmap. When a packet-capture
    tool is installed and authorized, it saves captures and gives you readable
    file links. It is **honest** about visibility: if the capture tool is missing
    or lacks permission, the report says so instead of fabricating evidence.
 
-> The Brain operates only within your authorized scope. It reasons and orchestrates;
-> it does not grant itself elevated privileges.
+6. **Prompt records** — appends every Agent, scoped AI, Swarm, `cyberdeck run`, and
+   `cyberdeck plan` user input before provider execution. Records have stable sequence
+   numbers and can be listed, searched, opened, or relabeled from the CLI.
 
 ---
 
@@ -275,7 +287,7 @@ What the Brain does, concretely:
 
 ### 1. AirBender 📶 — fast, cross-checked Reconnaissance
 
-AirBender finds every device on a network and figures out what each one is running.
+AirBender runs host discovery and service enumeration on the supplied network scope.
 It wraps tools like `nmap` (a network scanner) and chains them together. For local
 networks, `local-recon` runs nmap host discovery, netdiscover, and arp-scan
 concurrently when installed, merges their device lists, and enriches the result with
@@ -289,7 +301,7 @@ cyberspace airbender local-recon 192.168.1.0/24
 # STEP 1: Check what's installed
 cyberspace airbender status
 
-# STEP 2: Find every device on your network (replace with your network range)
+# STEP 2: Discover responding devices in your network range
 cyberspace airbender ping-sweep 192.168.1.0/24
 
 # STEP 3: Scan a specific device for open doors (ports)
@@ -527,7 +539,7 @@ an open-weights base on a dataset **you pick**. You can browse Hugging Face data
 (curated catalog + live discovery) and pick **any** dataset on the Hub, set your own
 training parameters (or use a built-in profile), set the **guardrails applied before
 use**, dispatch a QLoRA training job to a Vast.ai instance, then serve the finished
-model through an Ollama-compatible endpoint and plug it back in as your AI brain.
+model through an Ollama-compatible endpoint and configure it as the active AI provider.
 
 RoboDaddy requires you to define **measurable success criteria before planning or
 training**. Those criteria are saved in the model parameters and training plan, baked
@@ -535,8 +547,8 @@ into the composed system prompt, and initialized in `evaluation.json` as `not-te
 A completed training job is therefore never confused with a model that passed its
 held-out evaluations.
 
-Nothing about RoboDaddy artificially limits capability. You can build a **cyber bot**
-(authorized red-team / adversary emulation or defense) or a **fully custom bot**:
+RoboDaddy supports a **cyber bot** profile (authorized red-team, adversary-emulation,
+or defensive settings) and a **custom bot** profile:
 
 - **Cyber bot** — attunes training to **full offensive reasoning**, realistic
   **adversary modeling**, and **attack-path reasoning**: analyze footholds, explore
@@ -558,11 +570,12 @@ cyberspace robodaddy start
 #   1. refreshes the most recent Hugging Face datasets (cached for later viewing)
 #   2. asks cyber vs custom (custom can still toggle cyber capabilities on)
 #   3. requires measurable success criteria and their evaluation targets
-#   4. the AI provider scans your config and recommends the best parameters
+#   4. the AI provider reads the selected configuration and recommends parameters
 #      (hyperparameters, accumulation, scheduler, optimizer, ...) - no guide needed
 #   5. lets you input/edit the system prompt that structures the AI
 #   6. uses the AI to pull similar/effective parameters and enhance accuracy
-#   7. shows a GPU time/cost table, auto-picks the best, and lets you pick a row
+#   7. shows a GPU time/cost table, selects the lowest estimated compatible cost,
+#      and lets you pick a row
 #      or set a custom training time
 
 # Anthropic-derived guide + copyable prompt/evaluation template
@@ -582,7 +595,7 @@ cyberspace robodaddy parameters set --key guardrails.guardrail_level --value red
 cyberspace robodaddy cyber redteam
 cyberspace robodaddy cyber defensive
 
-# STEP 2: Or build a fully custom bot with whatever parameters you choose — no limits
+# STEP 2: Or build a custom bot with user-defined supported parameters
 cyberspace robodaddy custom "coding assistant"
 
 # STEP 3: Browse Hugging Face data and pick datasets (curated + live discovery)
@@ -615,7 +628,7 @@ cyberspace robodaddy dashboard --watch  # live view; Ctrl-C closes only the dash
 cyberspace robodaddy jobs               # compact job table
 cyberspace robodaddy models             # see your trained models
 
-# Serve the model and plug it back into the system as the new brain
+# Serve the model and configure it as the active provider
 cyberspace robodaddy serve offensive_pentest-d1 --target ollama
 cyberspace robodaddy connect offensive_pentest-d1
 
@@ -682,10 +695,11 @@ cyberspace project use "home lab pentest"
 # Check which project is currently active:
 cyberspace project status
 
-# Stop saving prompts (deactivate the current project):
+# Stop writing project prompt copies (Cyberdeck ledger remains active):
 cyberspace project close
 
-# Delete a project and all its prompts:
+# Delete a project folder and its project prompt copies.
+# Global Cyberdeck prompt records are retained:
 cyberspace project delete "surveillance in chicago"
 ```
 
@@ -701,7 +715,7 @@ Ghost Mode when Swarm opens if a session should not be written to this library.
 
 Every registered tool—including third-party tools—carries a success contract in its
 tool schema. Built-in tools have operation-specific outcomes and verification methods.
-Cyberbot, Brain, and Swarm use the same mandatory loop:
+Cyberbot, Cyberdeck, and Swarm use the same mandatory loop:
 
 1. define measurable acceptance criteria before acting;
 2. select tools whose contracts match those criteria;
@@ -709,7 +723,7 @@ Cyberbot, Brain, and Swarm use the same mandatory loop:
 4. cross-check material findings when practical; and
 5. report every criterion as pass, fail, uncertain, or not-tested with evidence.
 
-Swarm passes acceptance criteria into each specialist delegation. Brain additionally
+Swarm passes acceptance criteria into each specialist delegation. Cyberdeck additionally
 runs empirical output checks for supported security tools and persists the criterion
 outcome in its playbook, so failed or ambiguous runs are not remembered as successes.
 
@@ -717,7 +731,7 @@ outcome in its playbook, so failed or ambiguous runs are not remembered as succe
 # The AI remembers you — see what it's learned:
 cyberspace memory show
 
-# See providers or change the AI brain at any time:
+# See providers or change the active AI provider:
 cyberspace providers
 cyberspace setup --force
 
@@ -736,7 +750,7 @@ cyberspace tools
 
 | Platform | What it is | Key command |
 |---|---|---|
-| **Brain** 🧠 | Evolving orchestration backbone (multi-tool Kill Chain ops, learning, reports) | `cyberspace brain run "your objective"` |
+| **Cyberdeck** | Ordered prompt records, multi-tool Kill Chain plans, evidence checks, playbook, and reports | `cyberspace cyberdeck run "your objective"` |
 | **AirBender** 📶 | Reconnaissance and cross-checked network discovery | `cyberspace airbender local-recon 192.168.1.0/24` |
 | **ShadowDragon** 🐍 | Web and exploit tools | `cyberspace shadowdragon full-assault http://target` |
 | **Iceberg** 🧊 | System audit + Mullvad VPN + private DNS + Tor + privacy browser | `cyberspace iceberg check` |

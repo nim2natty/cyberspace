@@ -1,10 +1,10 @@
-"""The Brain's planner: decompose a request into a multi-tool Kill Chain plan.
+"""The Cyberdeck's planner: decompose a request into a multi-tool Kill Chain plan.
 
 Given a plain-language objective, the planner produces a list of tasks. Each task
 maps to a Cyber Kill Chain stage and names MULTIPLE tools to run for that task
-(cross-checking independent methods gives the most comprehensive picture). It
+(independent methods can cross-check the same target). It
 uses the configured AI provider when available, with a deterministic heuristic
-fallback so the Brain always produces a usable plan.
+fallback so the Cyberdeck always produces a usable plan.
 
 Example: 'find devices on this network' ->
   recon:  airbender ping-sweep + airbender nmap + airbender arp scan
@@ -21,7 +21,7 @@ from ..swarm import KILL_CHAIN, detect_stage
 
 
 @dataclass
-class BrainTask:
+class CyberdeckTask:
     stage: str
     description: str
     tools: list[str]
@@ -34,10 +34,10 @@ class BrainTask:
 
 
 @dataclass
-class BrainPlan:
+class CyberdeckPlan:
     intent: str
     detected_stage: str
-    tasks: list[BrainTask] = field(default_factory=list)
+    tasks: list[CyberdeckTask] = field(default_factory=list)
     missing_tools: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -68,7 +68,7 @@ def _parse_json(text: str):
         return []
 
 
-def plan(intent: str, *, max_tasks: int = 6) -> BrainPlan:
+def plan(intent: str, *, max_tasks: int = 6) -> CyberdeckPlan:
     """Build a multi-tool Kill Chain plan for a request.
 
     Uses the AI provider to decompose the objective when configured; otherwise
@@ -79,11 +79,11 @@ def plan(intent: str, *, max_tasks: int = 6) -> BrainPlan:
     if provider is not None:
         ai_tasks = _ai_plan(provider, intent, detected)
         if ai_tasks:
-            return BrainPlan(intent=intent, detected_stage=detected, tasks=ai_tasks)
+            return CyberdeckPlan(intent=intent, detected_stage=detected, tasks=ai_tasks)
     return heuristic_plan(intent, detected, max_tasks=max_tasks)
 
 
-def _ai_plan(provider, intent: str, detected: str) -> list[BrainTask]:
+def _ai_plan(provider, intent: str, detected: str) -> list[CyberdeckTask]:
     """Ask the provider to decompose the objective into multi-tool tasks."""
     from .playbook import successful_tools, failed_approaches
     known_tools = _known_tool_names()
@@ -94,7 +94,7 @@ def _ai_plan(provider, intent: str, detected: str) -> list[BrainTask]:
         "objective into 1-6 chronological tasks. Each task maps to a stage "
         "(recon, weapon, delivery, exploit, install, c2, objectives) and names MULTIPLE "
         "tools from the available list (cross-check independent methods for the most "
-        "comprehensive picture). Return ONLY a JSON array of objects with keys: "
+        "cross-checked result). Return ONLY a JSON array of objects with keys: "
         "stage, description, tools (array), depends_on (array of prior task indices), "
         "parallel (bool).",
         "",
@@ -116,7 +116,7 @@ def _ai_plan(provider, intent: str, detected: str) -> list[BrainTask]:
             tools = [str(t) for t in item.get("tools", []) if str(t) in known_tools or _looks_like_tool(t)]
             if not tools:
                 continue
-            tasks.append(BrainTask(
+            tasks.append(CyberdeckTask(
                 stage=str(item.get("stage", "recon")),
                 description=str(item.get("description", ""))[:300],
                 tools=tools,
@@ -152,70 +152,70 @@ def _looks_like_tool(name) -> bool:
 # ---------------------------------------------------------------------------
 # Deterministic heuristic planner (fallback + default)
 # ---------------------------------------------------------------------------
-def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> BrainPlan:
+def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> CyberdeckPlan:
     """Build a sensible multi-tool plan from keyword matching against the catalogs."""
     text = (intent or "").lower()
-    tasks: list[BrainTask] = []
+    tasks: list[CyberdeckTask] = []
 
     if any(k in text for k in ("device", "host", "network", "subnet", "who is on", "find devices")):
         # Recon: multiple independent discovery methods, then packet capture.
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="recon",
             description="Discover live devices and open services using independent methods.",
             tools=["airbender.ping_sweep", "airbender.nmap", "airbender.chain"],
             parallel=True))
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="recon",
             description=("For each discovered device, capture and inspect packets so the "
                         "operator can view traffic in a readable form (links to .pcap files)."),
             tools=["shadowdragon.kali_run::tshark", "shadowdragon.kali_run::tcpdump"],
             depends_on=[0], parallel=True))
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="objectives",
             description="Compile a device inventory with packet-capture links into one report.",
-            tools=["brain.report"],
+            tools=["cyberdeck.report"],
             depends_on=[1], parallel=False))
 
     elif any(k in text for k in ("web", "website", "url", "app", "sql", "login")):
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="recon",
             description="Identify the web technology and map its surface.",
             tools=["shadowdragon.whatweb", "shadowdragon.gobuster", "shadowdragon.nikto"],
             parallel=True))
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="exploit",
             description="Test for the highest-impact web weaknesses.",
             tools=["shadowdragon.kali_run::nuclei", "shadowdragon.sqlmap"],
             depends_on=[0], parallel=True))
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="objectives",
             description="Compile findings into a prioritized report.",
-            tools=["brain.report"],
+            tools=["cyberdeck.report"],
             depends_on=[1], parallel=False))
 
     elif any(k in text for k in ("password", "crack", "hash", "brute")):
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="exploit",
             description="Attempt credential recovery with multiple engines and wordlists.",
             tools=["shadowdragon.hashcat", "shadowdragon.john", "shadowdragon.hydra"],
             parallel=True))
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage="objectives",
             description="Summarize recovered credentials and recommendations.",
-            tools=["brain.report"], depends_on=[0], parallel=False))
+            tools=["cyberdeck.report"], depends_on=[0], parallel=False))
 
     else:
         # Generic: map the detected stage and give it the stage's toolset + a report.
         stage = detected or "recon"
         tools = _default_tools_for_stage(stage)
-        tasks.append(BrainTask(
+        tasks.append(CyberdeckTask(
             stage=stage, description="Run the specialist toolset for this objective.",
             tools=tools, parallel=True))
-        tasks.append(BrainTask(
-            stage="objectives", description="Compile results into a comprehensive report.",
-            tools=["brain.report"], depends_on=[0], parallel=False))
+        tasks.append(CyberdeckTask(
+            stage="objectives", description="Compile results into an evidence report.",
+            tools=["cyberdeck.report"], depends_on=[0], parallel=False))
 
-    return BrainPlan(intent=intent, detected_stage=detected, tasks=tasks[:max_tasks])
+    return CyberdeckPlan(intent=intent, detected_stage=detected, tasks=tasks[:max_tasks])
 
 
 def _default_tools_for_stage(stage: str) -> list[str]:
@@ -227,6 +227,6 @@ def _default_tools_for_stage(stage: str) -> list[str]:
         "exploit": ["shadowdragon.kali_run::nuclei", "shadowdragon.sqlmap"],
         "install": ["shadowdragon.kali_run::msfconsole"],
         "c2": ["iceberg.find"],
-        "objectives": ["brain.report"],
+        "objectives": ["cyberdeck.report"],
     }
-    return defaults.get(stage, ["brain.report"])
+    return defaults.get(stage, ["cyberdeck.report"])

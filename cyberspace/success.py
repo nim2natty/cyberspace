@@ -90,12 +90,13 @@ _OUTCOMES = {
         "serve": ("The trained model is configured for serving and responds through the intended local endpoint.", "Check model artifact, generated configuration, process/API health, and authentication."),
         "train": ("Training reaches a terminal state with progress, metrics, artifacts, cost, and criterion-based evaluation results.", "Check worker state, logs, checkpoints/model artifact, spend, and evaluation report."),
     },
-    "brain": {
+    "cyberdeck": {
         "acquire": ("A provenance-checked install candidate is found without installing untrusted software.", "Check source, package-manager command, provenance verdict, and confirmation boundary."),
         "plan": ("The objective is decomposed into ordered, scoped tasks with criteria, tools, dependencies, and verification.", "Check every objective criterion maps to at least one task and empirical check."),
         "recall": ("Relevant prior outcomes are returned with success state, evidence summary, and project scope.", "Check query relevance and never treat failed/uncertain outcomes as proven successes."),
         "run": ("All objective criteria are evaluated and the report contains evidence, failures, uncertainty, and artifacts.", "Require task and stage criterion results; success only when mandatory checks pass."),
         "stats": ("Playbook totals and tool history are calculated from persisted entries.", "Recount persisted entries and compare successes/failures/tool set."),
+        "prompts": ("Ordered prompt records are returned with sequence, label, source, and prompt text.", "Check sequence order and match query/label filters against persisted records."),
     },
     "project": {
         "create": ("A uniquely named project is persisted and becomes active.", "Reload the project index and active-project pointer."),

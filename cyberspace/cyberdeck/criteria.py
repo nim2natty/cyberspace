@@ -1,14 +1,14 @@
-"""Success criteria: measurable checks the Brain always evaluates against.
+"""Success criteria: measurable checks the Cyberdeck always evaluates against.
 
 A tool "running without error" is NOT the same as it succeeding. nmap returning
 empty output, sqlmap finding no injection, or a packet capture with zero packets
 all "succeed" under the old definition - which corrupts both the report and what
-the Brain learns. This module defines measurable per-tool and per-stage criteria
+the Cyberdeck learns. This module defines measurable per-tool and per-stage criteria
 and evaluates every task result against them.
 
 Grounded in the Anthropic prompt-engineering prerequisite: before any prompt/run,
 define clear success criteria and ways to empirically test against them. The
-Brain applies this platform-wide: every execution, every tool, every objective.
+Cyberdeck applies this platform-wide: every execution, every tool, every objective.
 """
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def _count_success(min_count: int, patterns: tuple, what: str, blank_msg: str):
 # Per-tool criteria registry
 # ---------------------------------------------------------------------------
 # Each entry maps a binary name to a list of measurable criteria. These are the
-# platform-wide defaults; the Brain applies them to every relevant task.
+# platform-wide defaults; the Cyberdeck applies them to every relevant task.
 def _tool_criteria() -> list[Criterion]:
     C: list[Criterion] = []
 

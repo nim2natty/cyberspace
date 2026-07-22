@@ -11,7 +11,7 @@ PROVIDERS = {
         "api_base": "https://console.vast.ai/api/v0",
         "auth": "header Authorization: Bearer $VAST_API_KEY",
         "key_url": "https://cloud.vast.ai/account/settings/",
-        "note": "Decentralized spot GPU market. Cheapest $/hr. Best for training.",
+        "note": "Decentralized spot GPU market with variable hourly offers.",
         "live": True,
     },
     "runpod": {

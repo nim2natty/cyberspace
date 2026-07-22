@@ -1,4 +1,4 @@
-"""ShadowDragon chain engine - interlinks ALL non-networking Kali tools.
+"""ShadowDragon chain engine: pipelines over registered assessment tools.
 
 Lets the user (or AI) run attack pipelines where each tool's output feeds the
 next. Example: whatweb -> searchsploit -> msfconsole. Every step records to memory.

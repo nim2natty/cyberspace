@@ -1,4 +1,4 @@
-"""AirBender super-tool - ALL networking tools merged + interlinked.
+"""AirBender networking module: registered discovery and enumeration tools with pipeline chaining.
 
 Merges nmap, masscan, aircrack-ng suite, netdiscover, netcat, traceroute, whois,
 dig, tcpdump under ONE CLI. The `chain` command runs interlinked pipelines so
@@ -43,7 +43,8 @@ class AirBenderModule(Module):
         return ModuleInfo(
             name="airbender", display_name="AirBender", version="0.2.0",
             emoji="\U0001f4f6",
-            description="Super-tool: ALL networking (nmap, masscan, aircrack-ng, nc, dig...) interlinked.",
+            description="Network discovery and enumeration using registered nmap, masscan, "
+                        "ping-sweep, WHOIS, DNS, and pipeline commands.",
             requires_tools=C.NETWORKING_TOOLS,
         )
 
@@ -74,7 +75,7 @@ class AirBenderModule(Module):
 
     def build_cli(self) -> typer.Typer:
         from ...host import is_available
-        app = typer.Typer(help="AirBender super-tool: ALL networking tools interlinked.")
+        app = typer.Typer(help="AirBender: registered networking tools with pipeline chaining.")
 
         @app.command("nmap")
         def _nmap(target: str = typer.Argument(...), args: str = typer.Option("-sV -T4","--args")):

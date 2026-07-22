@@ -325,7 +325,7 @@ PARAMETER_GUIDE = [
     ("optimizer", "adamw_torch, paged_adamw_8bit (saves VRAM), adafactor."),
     ("seed", "Reproducibility seed (any integer)."),
     ("packing", "Pack short examples together (faster) - true/false."),
-    ("dataset_ids", "Hugging Face repo ids to train on. Pick any, including ones you registered."),
+    ("dataset_ids", "Hugging Face repo ids to train on, including user-registered datasets."),
     ("focus.*", "Cyber capability toggles (offensive_reasoning, adversary_modeling, attack_path_reasoning, multi_turn_scenarios, sensitive_content, foothold_analysis, operator_tasks, real_attack_vectors)."),
     ("guardrails.authorization_confirmed", "You affirmed you are authorized to operate."),
     ("guardrails.authorization_scope", "The declared scope the model may operate in."),

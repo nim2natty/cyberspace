@@ -1,4 +1,4 @@
-"""ShadowDragon module - all non-networking Kali tools.
+"""ShadowDragon module: registered web, credential, exploit-search, OSINT, and Kali command wrappers.
 
 Layered over Kali Linux. Covers web apps, exploitation, password attacks,
 recon/OSINT, post-exploitation/AD, sniffing & MITM, forensics, crypto/stego,
@@ -46,7 +46,8 @@ class ShadowDragonModule(Module):
         return ModuleInfo(
             name="shadowdragon", display_name="ShadowDragon", version="0.1.0",
             emoji="\U0001f40d",
-            description="All non-networking Kali tools (web, exploit, creds, recon, post-exploit).",
+            description="Registered web, credential, exploit-search, OSINT, Metasploit, "
+                        "and generic Kali command wrappers.",
             requires_tools=all_tools()[:14],
         )
 
@@ -141,7 +142,7 @@ class ShadowDragonModule(Module):
                  fn=lambda module="", options="", lhost="", lport=4444, **_: _msf_run_tool(module, options, lhost, lport)))
 
     def build_cli(self) -> typer.Typer:
-        app = typer.Typer(help="ShadowDragon: all non-networking Kali tools.")
+        app = typer.Typer(help="ShadowDragon: registered assessment tool wrappers.")
 
         @app.command("sqlmap")
         def _sqlmap(url: str = typer.Argument(...), level: int = typer.Option(1), risk: int = typer.Option(1)):
@@ -192,7 +193,7 @@ class ShadowDragonModule(Module):
                 t.add_row(cat, ", ".join(tools))
             console.print(t)
 
-        # --- super-tool: chain + metasploit -------------------------------- #
+        # --- chain + metasploit -------------------------------- #
         @app.command("chain")
         def _chain(target: str = typer.Argument(...),
                     steps: str = typer.Option("", "--steps",

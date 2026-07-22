@@ -24,7 +24,7 @@ from .host import is_available
 
 console = Console()
 app = typer.Typer(
-    help="cyberspace - an open-source agentic pentest platform.",
+    help="cyberspace - authorized security tools, scoped AI modes, and model-training commands.",
     no_args_is_help=False, rich_markup_mode="rich", add_completion=False,
 )
 
@@ -297,18 +297,20 @@ def project_use(name: str = typer.Argument(..., help="project to set as active (
 
 @project_app.command("close")
 def project_close():
-    """Stop saving prompts to a project (deactivate)."""
+    """Stop writing project prompt copies; Cyberdeck ledger remains enabled."""
     from . import projects
     projects.set_active(None)
-    console.print("[dim]No active project. Prompts will not be saved.[/dim]")
+    console.print("[dim]No active project. Project prompt copies are disabled; "
+                  "Cyberdeck continues to store the ordered prompt ledger.[/dim]")
 
 
 @project_app.command("delete")
 def project_delete(name: str = typer.Argument(...)):
-    """Delete a project and all its saved prompts."""
+    """Delete a project folder; global Cyberdeck prompt records are retained."""
     from . import projects
     if projects.delete(name):
-        console.print(f"[green]Deleted project:[/green] {name}")
+        console.print(f"[green]Deleted project folder and its project prompt copies:[/green] {name}\n"
+                      "[dim]Global Cyberdeck prompt records are retained.[/dim]")
     else:
         console.print(f"[red]No project named '{name}'.[/red]")
 

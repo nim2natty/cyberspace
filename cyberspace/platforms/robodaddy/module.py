@@ -272,7 +272,7 @@ def _tool_cyber(flavor: str = "redteam", use_case: str = "", dataset: str = "",
 def _tool_custom(use_case: str = "general", dataset: str = "", base: str = "",
                  epochs=3, learning_rate=2e-4, batch_size=4, max_seq_len=2048,
                  lora_r=16, days: int = 1, success_criteria: str = ""):
-    """Agent-callable: build a fully custom bot with user-defined parameters."""
+    """Agent-callable: build a custom bot with user-defined parameters."""
     from .parameters import profile as load_profile, save_parameters
     from .plan import build_plan
     from .jobs import launch_background
@@ -347,10 +347,9 @@ class RoboDaddyModule(Module):
         return ModuleInfo(
             name="robodaddy", display_name="RoboDaddy", version="0.1.0",
             emoji="\U0001F916",  # robot
-            description="Design and train your own open source model. Browse and pick any "
-                        "Hugging Face dataset, set fully custom parameters (or use a cyber "
-                        "red-team / adversary-emulation profile), set your own guardrails "
-                        "before use, dispatch background QLoRA training, then serve it.",
+            description="Select a Hugging Face dataset, configure supported fine-tuning "
+                        "parameters and guardrails, dispatch background QLoRA jobs, record "
+                        "evaluation status, and create local serving configuration.",
             requires_tools=[],   # no host tools needed (everything is Python + remote APIs)
         )
 
@@ -460,8 +459,8 @@ class RoboDaddyModule(Module):
                         "required": ["flavor", "success_criteria"]}, fn=_tool_cyber))
         registry.register(Tool(
             name="robodaddy.custom",
-            description="Build a CUSTOM BOT with fully user-defined parameters and any "
-                        "Hugging Face dataset - no limits. Launches a dry-run plan.",
+            description="Build a custom bot with user-defined supported parameters and a "
+                        "Hugging Face dataset. Launches a dry-run plan.",
             parameters={"type": "object",
                         "properties": {"use_case": {"type": "string", "default": "general"},
                                        "dataset": {"type": "string", "default": ""},

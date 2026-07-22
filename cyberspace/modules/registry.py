@@ -35,7 +35,7 @@ def discover_and_load() -> dict[str, Module]:
         "cyberspace.platforms.shadowdragon.module",
         "cyberspace.platforms.stickem.module",
         "cyberspace.platforms.robodaddy.module",
-        "cyberspace.brain.module",
+        "cyberspace.cyberdeck.module",
     ]
     for path in builtins:
         m = _load_one(path)

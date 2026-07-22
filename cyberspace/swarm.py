@@ -340,6 +340,9 @@ class Swarm:
 
     def ask(self, prompt: str) -> str:
         """One user turn through the Cyber Kill Chain."""
+        from .cyberdeck.prompts import record_prompt, complete_prompt
+        prompt_record = record_prompt(
+            prompt, source="swarm-ghost" if self.ghost_mode else "swarm")
         # Refresh project-scoped Actions-on-Objectives memory every turn.
         self.messages[0]["content"] = build_system_prompt(WORKFLOW_SYSTEM)
         # Detect and announce the stage for the user's benefit.
@@ -356,12 +359,17 @@ class Swarm:
         from .agent.core import _project_tools
         all_tools = [dt] + _project_tools()
         for _ in range(self.max_iterations):
-            resp = chat_with_failover(self.provider, self.messages, all_tools, self.console)
+            try:
+                resp = chat_with_failover(self.provider, self.messages, all_tools, self.console)
+            except Exception as exc:
+                complete_prompt(prompt_record["sequence"], str(exc), status="failed")
+                raise
             self.messages.append(self._assistant_msg(resp))
             if not resp.tool_calls:
                 self.console.print()
                 self.console.print(f"[green]cyberspace [{spec.display if spec else 'Kill Chain'}]>[/green] {resp.text}")
                 self._save_to_project(prompt, resp.text)
+                complete_prompt(prompt_record["sequence"], resp.text)
                 return resp.text
             for call in resp.tool_calls:
                 if call.name == "swarm.delegate":
@@ -383,6 +391,7 @@ class Swarm:
                 self.messages.append({"role": "tool", "name": call.name,
                                       "tool_call_id": call.id, "content": result})
         self.console.print("[yellow](Cyber Kill Chain reached its step limit)[/yellow]")
+        complete_prompt(prompt_record["sequence"], "", status="incomplete")
         return ""
 
     @staticmethod

@@ -1,8 +1,8 @@
-"""The Brain orchestrator: plan -> acquire -> execute -> report -> learn.
+"""The Cyberdeck orchestrator: plan -> acquire -> execute -> report -> learn.
 
-This is the flagship entry point. It takes a plain-language objective and runs
-the full evolving pipeline, feeding every platform (swarm, airbender,
-shadowdragon, stickem, iceberg) and recording the outcome so the instance learns.
+It accepts a security objective, constructs a staged tool plan, resolves missing
+dependencies, executes ready tasks concurrently, evaluates evidence, writes a
+report, and records verified outcomes in the playbook.
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from . import playbook
-from .planner import plan as build_brain_plan
+from .planner import plan as build_cyberdeck_plan
 from .executor import execute_plan, compile_report, append_stage_criteria
 
 
@@ -19,7 +19,7 @@ def _on_noop(_s: str, _m: str) -> None:
 
 
 @dataclass
-class BrainOutcome:
+class CyberdeckOutcome:
     intent: str
     report: str
     plan_summary: str
@@ -30,19 +30,19 @@ class BrainOutcome:
 def run(intent: str, *, confirm_install: Optional[Callable] = None,
          tool_runner: Optional[Callable] = None, max_workers: int = 4,
          on_event: Optional[Callable[[str, str], None]] = None,
-         learn: bool = True) -> BrainOutcome:
-    """Run the full Brain pipeline for an objective.
+         learn: bool = True) -> CyberdeckOutcome:
+    """Run the full Cyberdeck pipeline for an objective.
 
     Steps:
       1. Plan: decompose into multi-tool Kill Chain tasks.
       2. Acquire: find/install any missing software (confirmed).
       3. Execute: run tasks concurrently, chaining dependent findings.
-      4. Report: compile a comprehensive report with artifact links.
+      4. Report: compile an evidence report with artifact links.
       5. Learn: record success/failure in the playbook for next time.
     """
     on_event = on_event or _on_noop
     on_event("plan", "decomposing objective into a Kill Chain plan...")
-    br_plan = build_brain_plan(intent)
+    br_plan = build_cyberdeck_plan(intent)
     on_event("plan", f"{len(br_plan.tasks)} task(s) across stages: "
                       f"{', '.join(t.stage for t in br_plan.tasks)}")
 
@@ -117,16 +117,16 @@ def run(intent: str, *, confirm_install: Optional[Callable] = None,
                 artifacts=matching.artifacts if matching else []))
     if stage_notes:
         on_event("criteria", "stage criteria: " + " | ".join(stage_notes))
-    on_event("done", "brain operation complete" if success else "brain operation finished with errors")
-    return BrainOutcome(intent=intent, report=report, plan_summary=plan_summary,
+    on_event("done", "cyberdeck operation complete" if success else "cyberdeck operation finished with errors")
+    return CyberdeckOutcome(intent=intent, report=report, plan_summary=plan_summary,
                         success=success, tools_used=tools_used)
 
 
 def plan_only(intent: str) -> str:
-    """Return a human-readable plan without executing (for the `brain plan` command)."""
+    """Return a human-readable plan without executing (for the `cyberdeck plan` command)."""
     from .playbook import feed_forward_prompt
-    p = build_brain_plan(intent)
-    lines = [f"# Brain plan for: {intent}",
+    p = build_cyberdeck_plan(intent)
+    lines = [f"# Cyberdeck plan for: {intent}",
              f"Mapped to Kill Chain stage: {p.detected_stage}", ""]
     for i, task in enumerate(p.tasks):
         deps = f" (after task{'s' if len(task.depends_on) != 1 else ''} " \

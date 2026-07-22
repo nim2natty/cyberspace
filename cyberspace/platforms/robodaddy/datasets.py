@@ -103,7 +103,7 @@ def dataset_by_id(dataset_id: str) -> dict:
     if custom:
         return dict(custom)
     # If nothing is known about it, return a permissive entry so the user can
-    # still pick ANY Hugging Face repo id (RoboDaddy does not limit you to the
+    # still enter any Hugging Face repo id (RoboDaddy accepts any
     # curated catalog). The generated training script handles the real schema.
     if "/" in dataset_id:
         return {
@@ -117,7 +117,7 @@ def dataset_by_id(dataset_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# User-registered Hugging Face datasets (pick anything on the Hub)
+# User-registered Hugging Face datasets (enter any repo id)
 # ---------------------------------------------------------------------------
 def _custom_file():
     from ...config import MODULES_DIR, ensure_dirs

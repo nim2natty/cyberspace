@@ -12,14 +12,14 @@ def main():
 
     loaded = discover_and_load()
     assert loaded, "no modules loaded"
-    expected = {"iceberg", "airbender", "shadowdragon", "stickem", "robodaddy"}
+    expected = {"iceberg", "airbender", "shadowdragon", "stickem", "robodaddy", "cyberdeck"}
     missing = expected - set(loaded)
     assert not missing, f"missing platforms: {missing}"
     print(f"PASS  platforms loaded: {sorted(loaded)}")
 
     # Per-module tool counts. Iceberg includes its full-system privacy audit.
     expected_tools = {"iceberg": 6, "airbender": 6, "shadowdragon": 16,
-                      "stickem": 9, "robodaddy": 9}
+                      "stickem": 9, "robodaddy": 15, "cyberdeck": 6}
     by_mod = {m: len(TOOL_REGISTRY.by_module(m)) for m in expected}
     for mod, n in expected_tools.items():
         assert by_mod.get(mod, 0) == n, \
