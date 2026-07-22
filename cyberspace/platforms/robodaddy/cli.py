@@ -126,23 +126,18 @@ def _coerce_known(current, value: str):
 
 
 def _launch_plan(console: Console, plan, *, provider: str, offer: Optional[int]) -> None:
-    """Show a plan summary and launch a background training job (dry-run default)."""
-    console.print(Panel.fit(
-        f"[bold]{plan.name}[/bold]\n"
-        f"base: {plan.base_model}   dataset: {plan.dataset_id}\n"
-        f"method: {plan.method} on {plan.num_gpus}x {plan.gpu}   epochs: {plan.epochs}\n"
-        f"est. time: {plan.hours}h   est. cost: ${plan.cost_low:.2f}-${plan.cost_high:.2f}\n"
-        + ("\n".join("  " + n for n in plan.notes)),
-        title="RoboDaddy plan", border_style="cyan"))
-    question = ("Rent the GPU and launch paid training?" if provider == "vastai"
-                else "Launch this training dry-run?")
-    if not Confirm.ask(question, default=False):
+    """Show a friendly payment summary and launch a background training job."""
+    from .payment import confirm_spend
+    if not confirm_spend(console, plan, provider):
         console.print("[dim]Plan reviewed; nothing was launched.[/dim]")
         return
     from .jobs import launch_background
     model = launch_background(plan, dry_run=(provider == "dry-run"), vast_offer_id=offer)
+    cost_note = ("[green]no charge (free dry-run)[/green]" if provider == "dry-run"
+                 else f"[yellow]projected ~${plan.cost_mid:.2f}[/yellow]")
     console.print(Panel.fit(
         f"[green]launched in background:[/green] {model.name}\nstatus: {model.status}\n"
+        f"payment: {cost_note}\n"
         "You may close this terminal; the worker runs independently.\n"
         "Check progress: cyberspace robodaddy dashboard",
         border_style="green"))

@@ -92,6 +92,23 @@ def build_system_prompt(base: str = "") -> str:
         prompt = (base or DEFAULT_SYSTEM) + context_block()
         from ..projects import context_block as project_context
         prompt += project_context()
+        # Surface the Brain (evolving backbone) + its learned playbook so the
+        # agent uses brain.run for complex multi-step objectives and leans on
+        # what previously worked.
+        try:
+            from ..brain.playbook import stats as brain_stats
+            bs = brain_stats()
+            if bs["total"]:
+                prompt += (
+                    "\n\n## Brain (evolving backbone)\n"
+                    "For complex, multi-step security objectives, prefer the brain.run tool: "
+                    "it plans a multi-tool Cyber Kill Chain operation, runs sub-tasks "
+                    "concurrently, compiles a comprehensive report, and learns the outcome. "
+                    f"Your playbook has {bs['total']} past operations "
+                    f"({bs['successes']} ok) using: {', '.join(bs['tools_used'][:12])}. "
+                    "Use brain.recall to reuse what worked.")
+        except Exception:
+            pass
         # Tell the agent about the active project and that it can auto-switch.
         active = get_active()
         if active:

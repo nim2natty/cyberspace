@@ -218,6 +218,59 @@ system directly from the command line.
 
 ---
 
+## The Brain 🧠 — the evolving orchestration backbone
+
+The Brain is cyberspace's flagship layer. It sits **above** the platforms and
+turns one plain-language objective into a coordinated, multi-tool operation
+organized by the Cyber Kill Chain. Instead of stopping at the first matching
+command, it selects **multiple complementary tools** (active discovery, service
+enumeration, passive packet observation, evidence correlation), runs them
+concurrently, compiles a single evidence report, and **learns** from each
+outcome so your instance keeps getting sharper — all within your authorized scope.
+
+The Brain **feeds every platform**: Swarm (parallel, stage-scoped work units),
+AirBender, ShadowDragon, StickEm, and Iceberg.
+
+```bash
+# Plan a multi-tool operation (shows the Kill Chain plan without running it)
+cyberspace brain plan "find devices on this network and view their traffic"
+
+# Run the full pipeline: plan -> acquire missing software -> concurrent
+# execution -> comprehensive report -> learn the outcome
+cyberspace brain run "find devices on this network"
+
+# See what the Brain has learned (what worked / failed before)
+cyberspace brain stats
+cyberspace brain recall "devices"
+```
+
+What the Brain does, concretely:
+
+1. **Capability planning** — translates your objective into Kill Chain stages and
+   picks several tools per stage (e.g. for *find devices*: ping-sweep + nmap +
+   arp scan, then passive packet capture per host, then a compiled report).
+2. **Safe software acquisition** — if a needed tool is missing, it searches the
+   local catalog and the web (via Iceberg), but **only ever installs through a
+   verified package manager** (apt/brew/pip) after showing exactly what would run
+   and requiring your explicit approval. Arbitrary `curl|bash` downloads are
+   refused outright.
+3. **Outcome learning** — records which tools succeeded, failed, or were
+   unavailable, scoped to the active project so unrelated engagements never mix.
+   Obvious secrets are scrubbed before anything is persisted. That history is fed
+   back as bounded context to improve later plans.
+4. **Multi-agent execution** — Swarm breaks the objective into parallel,
+   stage-scoped work units; independent methods run concurrently and outputs are
+   reconciled into one evidence/report model.
+5. **User-friendly network evidence** — goes beyond nmap. When a packet-capture
+   tool is installed and authorized, it saves captures and gives you readable
+   file links. It is **honest** about visibility: if the capture tool is missing
+   or lacks permission, the report says so instead of fabricating evidence.
+
+> The Brain operates only within your authorized scope. It reasons and orchestrates;
+> it does not grant itself elevated privileges.
+
+---
+
 ## Walkthrough: each platform
 
 ### 1. AirBender 📶 — fast, cross-checked Reconnaissance
@@ -653,6 +706,7 @@ cyberspace tools
 
 | Platform | What it is | Key command |
 |---|---|---|
+| **Brain** 🧠 | Evolving orchestration backbone (multi-tool Kill Chain ops, learning, reports) | `cyberspace brain run "your objective"` |
 | **AirBender** 📶 | Reconnaissance and cross-checked network discovery | `cyberspace airbender local-recon 192.168.1.0/24` |
 | **ShadowDragon** 🐍 | Web and exploit tools | `cyberspace shadowdragon full-assault http://target` |
 | **Iceberg** 🧊 | System audit + Mullvad VPN + private DNS + Tor + privacy browser | `cyberspace iceberg check` |
