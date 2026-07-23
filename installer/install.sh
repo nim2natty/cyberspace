@@ -44,4 +44,7 @@ case ":${PATH}:" in *":${bin_dir}:"*) ;;
     printf '[cyberspace] added %s to PATH; open a new terminal.\n' "${bin_dir}" ;;
 esac
 printf '[cyberspace] installed and verified: %s\n' "${bin_dir}/cyberspace"
-printf 'Next: cyberspace setup && cyberspace doctor\n'
+printf '\nRun it now in this terminal:\n  %s setup\n  %s doctor\n  %s\n' \
+  "${bin_dir}/cyberspace" "${bin_dir}/cyberspace" "${bin_dir}/cyberspace"
+printf '\nOr open a new terminal and run: cyberspace setup\n'
+printf 'Later, update with: cyberspace update\n'

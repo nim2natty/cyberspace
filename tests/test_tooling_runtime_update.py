@@ -155,3 +155,17 @@ def test_source_update_fast_forwards_and_refreshes_environment(tmp_path):
     assert result.ok and result.method == "source"
     assert commands[1][-4:] == ["pull", "--ff-only", "origin", "main"]
     assert commands[2] == [str(python), "-m", "pip", "install", "-e", str(tmp_path)]
+
+
+def test_posix_standalone_update_replaces_only_after_exit(tmp_path):
+    from cyberspace.updater import _schedule_standalone_replacement
+    staged = tmp_path / "cyberspace.update"
+    destination = tmp_path / "cyberspace"
+    calls = []
+    _schedule_standalone_replacement(
+        staged, destination, platform_name="posix",
+        popen=lambda command, **kwargs: calls.append((command, kwargs)))
+    command, kwargs = calls[0]
+    assert command[:3] == ["sh", "-c", 'sleep 2; mv -f -- "$1" "$2"']
+    assert command[-2:] == [str(staged), str(destination)]
+    assert kwargs["start_new_session"] is True

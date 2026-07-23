@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import re
 from pathlib import Path
 
-from cyberspace.uninstall import MANAGED_MARKER, remove_installation
+from cyberspace.uninstall import (
+    MANAGED_MARKER, _schedule_executable_removal, remove_installation,
+)
 
 
 class UninstallTests(unittest.TestCase):
@@ -38,6 +41,47 @@ class UninstallTests(unittest.TestCase):
                             remove_source=True, purge_data=True)
         self.assertFalse(self.root.exists())
         self.assertFalse(self.data.exists())
+
+    def test_standalone_executable_is_removed_only_after_process_exit(self):
+        scheduled = []
+        actions = remove_installation(
+            self.root, self.launcher, self.data, standalone=True,
+            deferred_remover=lambda path: scheduled.append(path))
+        self.assertTrue(self.launcher.exists(), "running frozen executable was unlinked")
+        self.assertEqual(scheduled, [self.launcher])
+        self.assertTrue(any("scheduled executable removal" in action for action in actions))
+
+    def test_posix_remover_passes_path_as_separate_argument(self):
+        calls = []
+        _schedule_executable_removal(
+            self.launcher, platform_name="posix",
+            popen=lambda command, **kwargs: calls.append((command, kwargs)))
+        command, kwargs = calls[0]
+        self.assertEqual(command[:3], ["sh", "-c", 'sleep 2; rm -f -- "$1"'])
+        self.assertEqual(command[-1], str(self.launcher.resolve()))
+        self.assertTrue(kwargs["start_new_session"])
+
+    def test_installer_tells_current_shell_how_to_run_and_update(self):
+        installer = Path(__file__).resolve().parents[1] / "installer" / "install.sh"
+        text = installer.read_text()
+        self.assertIn('${bin_dir}/cyberspace', text)
+        self.assertIn("open a new terminal", text)
+        self.assertIn("cyberspace update", text)
+
+    def test_uninstall_help_uses_wipe_not_purge_data(self):
+        from typer.testing import CliRunner
+        from cyberspace.cli import app
+        result = CliRunner().invoke(app, ["uninstall", "--help"])
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("wipe", result.output)
+        self.assertNotIn("purge-data", result.output)
+
+    def test_package_and_runtime_versions_match(self):
+        import cyberspace
+        project = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', project.read_text())
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1), cyberspace.__version__)
 
     def test_unmanaged_launcher_is_preserved(self):
         self.launcher.write_text("#!/bin/sh\necho unrelated\n")

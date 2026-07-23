@@ -449,17 +449,23 @@ def doctor():
 
 @app.command()
 def uninstall(
+    mode: str = typer.Argument("", help="use 'wipe' to also remove all saved user data"),
     remove_source: bool = typer.Option(False, "--remove-source", help="also delete the checkout"),
-    purge_data: bool = typer.Option(False, "--purge-data", help="also delete config, projects, and memory"),
     yes: bool = typer.Option(False, "--yes", "-y", help="skip confirmation"),
 ):
-    """Uninstall cyberspace. Saved projects and configuration are kept by default."""
+    """Uninstall Cyberspace; add `wipe` to also remove settings and projects."""
     import os
     import sys
     from pathlib import Path
     from rich.prompt import Confirm
     from .config import HOME
     from .uninstall import remove_installation
+
+    mode = mode.strip().lower()
+    if mode not in ("", "wipe"):
+        console.print(f"[red]Unknown uninstall mode '{mode}'. Use: cyberspace uninstall wipe[/red]")
+        raise typer.Exit(2)
+    wipe = mode == "wipe"
 
     standalone = bool(getattr(sys, "frozen", False))
     root = Path(os.environ.get("CYBERSPACE_ROOT", Path(__file__).resolve().parents[1]))
@@ -468,17 +474,17 @@ def uninstall(
     extras = []
     if remove_source:
         extras.append("source checkout")
-    if purge_data:
-        extras.append("saved projects/configuration")
+    if wipe:
+        extras.append("all saved projects/configuration")
     detail = ", ".join(extras) if extras else "standalone executable"
     if not yes and not Confirm.ask(f"Remove cyberspace ({detail})?", default=False):
         console.print("[dim]Uninstall cancelled.[/dim]")
         return
     for action in remove_installation(root, launcher, HOME,
-                                      remove_source=remove_source, purge_data=purge_data,
+                                      remove_source=remove_source, purge_data=wipe,
                                       standalone=standalone):
         console.print(f"[green]✓[/green] {action}")
-    if not purge_data:
+    if not wipe:
         console.print(f"[dim]Saved projects and configuration kept at {HOME}[/dim]")
     console.print("[green]Cyberspace uninstalled.[/green]")
 

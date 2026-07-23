@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cyberspace"
-version = "0.9.0"
+version = "0.9.1"
 description = "cyberspace - an agentic security lab platform with scoped tool agents"
 readme = "README.md"
 license = { text = "MIT" }

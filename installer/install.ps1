@@ -30,4 +30,6 @@ if (($UserPath -split ';') -notcontains $BinDir) {
     Write-Host "[cyberspace] added $BinDir to your user PATH; open a new terminal."
 }
 Write-Host "[cyberspace] installed and verified: $Destination"
-Write-Host "Next: cyberspace setup; cyberspace doctor"
+Write-Host "Run it now: $Destination setup; $Destination doctor; $Destination"
+Write-Host "Or open a new terminal and run: cyberspace setup"
+Write-Host "Later, update with: cyberspace update"

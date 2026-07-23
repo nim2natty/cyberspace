@@ -87,13 +87,25 @@ GitHub release, verifies its SHA-256 checksum, and adds `cyberspace` to your use
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
+No additional installation step is required. The curl command installs the verified
+executable at `~/.local/bin/cyberspace`. Because a downloaded script cannot change the
+current parent shell's PATH, either run it immediately by its full path:
+
+```bash
+~/.local/bin/cyberspace setup
+~/.local/bin/cyberspace doctor
+~/.local/bin/cyberspace
+```
+
+or open a new terminal and use the shorter `cyberspace` command.
+
 ### Windows (PowerShell)
 
 ```powershell
 irm https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.ps1 | iex
 ```
 
-Open a new terminal, then run:
+After opening a new terminal, run:
 
 ```bash
 cyberspace setup                    # connect an AI once
@@ -127,12 +139,24 @@ cyberspace ai robodaddy.plan estimate a cheap support model
 
 ### Upgrade and uninstall
 
-Run the same installer again to replace the executable with the latest verified release.
+Cyberspace can update itself using the detected installation method. Standalone releases
+are checksum-verified before replacement:
 
 ```bash
-cyberspace uninstall              # keep settings and projects
-cyberspace uninstall --purge-data # remove settings and projects too
+cyberspace update
+cyberspace --version
 ```
+
+If the current terminal has not loaded the installer PATH yet, use
+`~/.local/bin/cyberspace update`. Re-running the curl installer is also supported.
+
+```bash
+cyberspace uninstall      # remove the app; keep settings and projects
+cyberspace uninstall wipe # remove the app and all settings/projects too
+```
+
+Standalone uninstall schedules deletion just after the running Cyberspace process exits,
+so Linux/macOS PyInstaller executables are never deleted while their bootloader is active.
 
 ### Developers only
 
@@ -747,7 +771,8 @@ cyberspace update --yes
 
 Source-checkout updates use a fast-forward-only Git pull and refresh the virtual
 environment. Cyberspace refuses to update a dirty checkout unless `--force` is supplied.
-Standalone updates verify the release SHA-256 checksum before replacing the executable.
+Standalone updates verify the release SHA-256 checksum, stage the new executable, and
+replace the running binary only after Cyberspace exits.
 
 ### Success contracts across the platform
 

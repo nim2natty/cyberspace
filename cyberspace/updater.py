@@ -72,7 +72,8 @@ def _update_source(root: Path, *, force: bool, runner: Callable) -> UpdateResult
                         _result_message(install, "Source checkout updated and environment refreshed"))
 
 
-def _update_standalone(*, downloader: Callable | None = None) -> UpdateResult:
+def _update_standalone(*, downloader: Callable | None = None,
+                       replacement_scheduler=None) -> UpdateResult:
     os_name = {"Darwin": "macos", "Linux": "linux", "Windows": "windows"}.get(
         platform.system())
     arch = {"x86_64": "x86_64", "AMD64": "x86_64", "arm64": "arm64",
@@ -96,12 +97,29 @@ def _update_standalone(*, downloader: Callable | None = None) -> UpdateResult:
         if actual != expected:
             return UpdateResult(False, "standalone", "Release checksum verification failed")
         destination = Path(sys.executable)
-        if os.name == "nt":
-            return UpdateResult(False, "standalone",
-                                "Close Cyberspace and rerun installer/install.ps1 to replace the active executable")
         binary.chmod(0o755)
-        os.replace(binary, destination)
-    return UpdateResult(True, "standalone", f"Standalone executable updated: {destination}")
+        staged = destination.with_name(destination.name + ".update")
+        os.replace(binary, staged)
+        (replacement_scheduler or _schedule_standalone_replacement)(staged, destination)
+    return UpdateResult(
+        True, "standalone",
+        f"Verified update staged for {destination}; it will be installed after Cyberspace exits")
+
+
+def _schedule_standalone_replacement(staged: Path, destination: Path, *,
+                                     popen=subprocess.Popen,
+                                     platform_name: str = os.name) -> None:
+    """Replace the frozen executable only after its bootloader has exited."""
+    common = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+              "stderr": subprocess.DEVNULL, "close_fds": True}
+    if platform_name == "nt":
+        command = ["cmd", "/c", (f'ping 127.0.0.1 -n 3 >NUL & '
+                                   f'move /y "{staged}" "{destination}" >NUL')]
+        popen(command, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), **common)
+    else:
+        command = ["sh", "-c", 'sleep 2; mv -f -- "$1" "$2"',
+                   "cyberspace-update", str(staged), str(destination)]
+        popen(command, start_new_session=True, **common)
 
 
 def _download(url: str, destination: Path) -> None:
