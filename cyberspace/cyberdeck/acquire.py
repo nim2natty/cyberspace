@@ -47,12 +47,17 @@ def resolve_tools(tool_names: list[str], *, on_event: Optional[Callable[[str, st
 
 def missing_tools(tool_names: list[str]) -> list[str]:
     """Return the subset of tools that are not installed."""
-    return [n for n in tool_names if not is_available(_binary_name(n))]
+    return [n for n in tool_names
+            if (binary := _binary_name(n)) and not is_available(binary)]
 
 
 def _binary_name(tool_ref: str) -> str:
     """Normalize a plan tool reference to a host binary name."""
     # 'shadowdragon.kali_run::tshark' -> 'tshark' ; 'airbender.nmap' -> 'nmap'
+    if tool_ref == "cyberdeck.report":
+        return ""
+    if tool_ref == "airbender.chain":
+        return "nmap"
     return tool_ref.rsplit("::", 1)[-1].rsplit(".", 1)[-1]
 
 
@@ -146,7 +151,11 @@ def install(candidate: ToolCandidate, *, confirm: Callable[[str], bool] = None,
     if not confirm(prompt):
         return False, "installation declined by operator"
     runner = runner or _default_runner
-    return runner(candidate.install_command)
+    result = runner(candidate.install_command)
+    if result[0]:
+        from ..host import which
+        which.cache_clear()
+    return result
 
 
 @dataclass

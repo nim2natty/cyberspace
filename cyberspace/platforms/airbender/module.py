@@ -21,6 +21,8 @@ def _tool_chain(pipeline="", steps="", target="", **_):
         step_list = [s.strip() for s in steps.split("->")]
     elif pipeline and pipeline in C.PIPELINES:
         step_list = C.PIPELINES[pipeline]["steps"]
+    elif pipeline == "local-discovery":
+        step_list = ["local-discovery"]
     else:
         step_list = ["local-discovery", "nmap-top"]
     results = C.run_chain(step_list, target)

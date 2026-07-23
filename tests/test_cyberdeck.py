@@ -76,15 +76,14 @@ def test_playbook_records_failures_for_avoidance(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 # Cyberdeck planner
 # ---------------------------------------------------------------------------
-def test_heuristic_plan_devices_uses_multiple_tools_and_packets():
+def test_heuristic_device_plan_uses_one_cross_checked_discovery():
     from cyberspace.cyberdeck.planner import heuristic_plan
     p = heuristic_plan("find devices on this network", "recon")
     stages = [t.stage for t in p.tasks]
     tools = [t for task in p.tasks for t in task.tools]
-    # Multiple independent discovery methods.
-    assert "airbender.nmap" in tools and "airbender.ping_sweep" in tools
-    # Packet-capture tools for viewing traffic.
-    assert any("tshark" in t or "tcpdump" in t for t in tools)
+    # Airbender's local discovery runs installed nmap/ARP probes concurrently;
+    # do not schedule overlapping full scans or packet capture for inventory.
+    assert tools == ["airbender.chain", "cyberdeck.report"]
     assert "objectives" in stages  # ends with a compiled report
 
 
@@ -115,7 +114,7 @@ def test_ai_plan_uses_provider(monkeypatch):
         def chat(self, messages, tools):
             return Resp()
     monkeypatch.setattr(planner, "_provider", lambda: FakeProvider())
-    p = planner.plan("scan my authorized network")
+    p = planner.plan("scan my authorized network", use_ai=True)
     assert p.tasks and p.tasks[0].tools == ["airbender.nmap"]
 
 
@@ -142,6 +141,35 @@ def test_acquire_install_requires_confirmation():
 # ---------------------------------------------------------------------------
 # Cyberdeck executor + full pipeline
 # ---------------------------------------------------------------------------
+def test_simple_device_plan_is_local_and_non_overlapping(monkeypatch):
+    from cyberspace.cyberdeck import planner
+
+    monkeypatch.setattr(planner, "_provider", lambda: (_ for _ in ()).throw(
+        AssertionError("default planning must not call a provider")))
+    plan = planner.plan("find devices on lab network")
+    assert [task.tools for task in plan.tasks] == [
+        ["airbender.chain"], ["cyberdeck.report"]]
+
+
+def test_live_dispatch_preserves_explicit_target(monkeypatch):
+    from cyberspace.cyberdeck import executor
+    from cyberspace.modules.base import TOOL_REGISTRY, Tool
+
+    seen = {}
+    TOOL_REGISTRY.register(Tool(
+        "test.target", "test target", {"type": "object", "properties": {
+            "target": {"type": "string"}}, "required": ["target"]},
+        lambda target: seen.setdefault("target", target)))
+    executor._live_tool_runner("test.target", {
+        "task": "scan the requested target", "intent": "scan 10.20.30.0/24"})
+    assert seen["target"] == "10.20.30.0/24"
+
+
+def test_internal_report_is_not_treated_as_missing_binary():
+    from cyberspace.cyberdeck.acquire import missing_tools
+    assert missing_tools(["cyberdeck.report"]) == []
+
+
 def test_execute_runs_concurrent_and_chains(tmp_path, monkeypatch):
     import cyberspace.config as config
     from cyberspace.cyberdeck.planner import CyberdeckPlan, CyberdeckTask

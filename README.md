@@ -297,6 +297,24 @@ ports and service versions. Missing Pi packages degrade gracefully.
 cyberspace airbender local-recon 192.168.1.0/24
 ```
 
+For raw-socket, ARP, wireless-interface, or packet-capture access, enable reviewed
+per-command elevation before the subcommand. Cyberspace authenticates once and only
+elevates its allowlisted network/capture binaries; the AI provider and the Cyberspace
+process itself do not run as root:
+
+```bash
+cyberspace --elevated airbender local-recon 192.168.1.0/24
+cyberspace --elevated ai airbender "find devices on 192.168.1.0/24"
+cyberspace --elevated cyberdeck run "find devices on 192.168.1.0/24"
+```
+
+Run `cyberspace doctor` to verify whether commands execute on the native host network
+or inside a container. Elevation cannot escape a container network namespace. On Linux,
+a deliberately containerized scanner needs host networking and the relevant capabilities,
+for example `--network host --cap-add NET_RAW --cap-add NET_ADMIN`; Docker Desktop on
+macOS/Windows does not provide the same direct host-network visibility, so run Cyberspace
+natively when scanning the physical LAN.
+
 ```bash
 # STEP 1: Check what's installed
 cyberspace airbender status
@@ -710,6 +728,19 @@ Ghost Mode when Swarm opens if a session should not be written to this library.
 ---
 
 ## Other useful commands
+
+```bash
+# Update using the detected installation method (source checkout, Python package,
+# or checksum-verified standalone release):
+cyberspace update
+
+# Confirm non-interactively for a reviewed automation job:
+cyberspace update --yes
+```
+
+Source-checkout updates use a fast-forward-only Git pull and refresh the virtual
+environment. Cyberspace refuses to update a dirty checkout unless `--force` is supplied.
+Standalone updates verify the release SHA-256 checksum before replacing the executable.
 
 ### Success contracts across the platform
 

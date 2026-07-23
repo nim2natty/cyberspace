@@ -35,10 +35,24 @@ def _autoload() -> None:
 
 
 @app.callback(invoke_without_command=True)
-def _root(ctx: typer.Context, version: bool = typer.Option(False, "--version", "-V")):
+def _root(
+    ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", "-V"),
+    elevated: bool = typer.Option(
+        False, "--elevated", help="confirm elevation for allowlisted network/capture tools"),
+):
     if version:
         console.print(f"cyberspace {__version__}")
         raise typer.Exit()
+    if elevated:
+        from rich.prompt import Confirm
+        from .host import enable_elevation, runtime_summary
+        ok, message = enable_elevation(
+            confirm=lambda prompt: Confirm.ask(prompt, default=False, console=console))
+        console.print(("[green]" if ok else "[red]") + message)
+        console.print(f"[dim]{runtime_summary()}[/dim]")
+        if not ok:
+            raise typer.Exit(1)
     if ctx.invoked_subcommand is None:
         from .ui.dashboard import interactive
         interactive()
@@ -49,6 +63,29 @@ def setup(force: bool = typer.Option(False, "--force", help="reconfigure")):
     """Configure the agent FIRST. Unlocks agentic features in all platforms."""
     from .agent.setup import run_wizard
     run_wizard(force=force)
+
+
+@app.command()
+def update(
+    yes: bool = typer.Option(False, "--yes", "-y", help="confirm the update non-interactively"),
+    force: bool = typer.Option(False, "--force", help="attempt update with local source changes"),
+):
+    """Update Cyberspace to the latest version using the current install method."""
+    from pathlib import Path
+    from rich.prompt import Confirm
+    from .updater import installation_method, update_latest
+    root = Path(__import__("os").environ.get(
+        "CYBERSPACE_ROOT", Path(__file__).resolve().parents[1]))
+    method = installation_method(root)
+    console.print(f"[cyan]Update method:[/cyan] {method}")
+    if not yes and not Confirm.ask("Update Cyberspace to the latest version?", default=False,
+                                   console=console):
+        console.print("[dim]Update cancelled.[/dim]")
+        return
+    result = update_latest(root=root, force=force)
+    console.print(("[green]" if result.ok else "[red]") + result.message)
+    if not result.ok:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -386,8 +423,13 @@ def doctor():
     """Check what's installed and provisionable."""
     _autoload()
     from .agent.config import is_configured, load_config
+    from .host import runtime_environment, runtime_summary
     console.print(f"[bold]cyberspace {__version__} doctor[/bold]\n")
     t = Table("component", "status", "detail")
+    runtime = runtime_environment()
+    t.add_row("execution environment",
+              "[yellow]container[/yellow]" if runtime["container"] else "[green]native host[/green]",
+              runtime_summary())
     cfg = load_config() if is_configured() else None
     t.add_row("agent", "[green]configured[/green]" if cfg else "[red]NOT configured[/red]",
               f"{cfg.provider}/{cfg.model}" if cfg else "run: cyberspace setup")

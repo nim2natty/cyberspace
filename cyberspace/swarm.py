@@ -194,7 +194,10 @@ def detect_stage(prompt: str) -> str:
     p = (prompt or "").lower()
     best, best_score = "recon", 0
     for stage, keywords in _STAGE_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw in p)
+        # Longer phrases are more specific than a shared single word (for
+        # example "run exploit" belongs to exploitation, not weaponization).
+        score = sum(len(kw.split()) for kw in keywords
+                    if re.search(r"(?<!\w)" + re.escape(kw) + r"(?!\w)", p))
         if score > best_score:
             best, best_score = stage, score
     return best
@@ -299,9 +302,12 @@ class Swarm:
                 tool = TOOL_REGISTRY.get(call.name)
                 if tool:
                     try:
-                        out = str(tool.fn(**call.arguments))
+                        from .tooling import compile_tool_call
+                        compiled = compile_tool_call(tool, call.arguments, task)
+                        self.console.print(f"  [dim]compiled {compiled.preview()}[/dim]")
+                        out = str(tool.fn(**compiled.arguments))
                         from .memory import record
-                        record(spec.name, call.name, call.arguments, out[:300])
+                        record(spec.name, call.name, compiled.arguments, out[:300])
                     except Exception as e:
                         out = f"ERROR: {e}"
                 else:
@@ -372,6 +378,18 @@ class Swarm:
                 complete_prompt(prompt_record["sequence"], resp.text)
                 return resp.text
             for call in resp.tool_calls:
+                selected = next((tool for tool in all_tools if tool.name == call.name), None)
+                if selected:
+                    try:
+                        from .tooling import compile_tool_call
+                        compiled = compile_tool_call(selected, call.arguments, prompt)
+                        call.arguments = compiled.arguments
+                        self.console.print(f"  [dim]compiled {compiled.preview()}[/dim]")
+                    except Exception as exc:
+                        result = f"ERROR: {exc}"
+                        self.messages.append({"role": "tool", "name": call.name,
+                                              "tool_call_id": call.id, "content": result})
+                        continue
                 if call.name == "swarm.delegate":
                     result = self.delegate(call.arguments.get("agent_name", ""),
                                            call.arguments.get("task", ""),

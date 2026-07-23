@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -22,6 +23,19 @@ class KillChainTests(unittest.TestCase):
         ])
         self.assertEqual(detect_stage("find devices on my local network"), "recon")
         self.assertEqual(detect_stage("write up the findings"), "objectives")
+
+    def test_stage_detection_uses_words_not_substrings(self):
+        expected = {
+            "scan the lab network": "recon",
+            "build a payload": "weapon",
+            "deliver the test artifact": "delivery",
+            "run exploit validation": "exploit",
+            "install on the lab router": "install",
+            "establish a c2 proxy": "c2",
+            "report findings": "objectives",
+        }
+        for prompt, stage in expected.items():
+            self.assertEqual(detect_stage(prompt), stage, prompt)
 
     def test_anthropic_tool_ids_are_preserved(self):
         converted = _anthropic_messages([
@@ -91,6 +105,25 @@ class KillChainTests(unittest.TestCase):
              patch.object(chain, "run", return_value=Result()) as run:
             chain._tool_nmap("10.0.0.2 10.0.0.3", "--top-ports 10")
         self.assertEqual(run.call_args.args[1][-2:], ["10.0.0.2", "10.0.0.3"])
+
+    def test_local_recon_has_one_bounded_enrichment_scan(self):
+        from cyberspace.platforms.airbender.chain import PIPELINES
+        self.assertEqual(PIPELINES["local-recon"]["steps"],
+                         ["local-discovery", "quick-services"])
+
+    def test_independent_tools_run_concurrently(self):
+        from cyberspace.cyberdeck.executor import execute_plan
+        from cyberspace.cyberdeck.planner import CyberdeckPlan, CyberdeckTask
+
+        def runner(tool, args):
+            time.sleep(0.12)
+            return '{"status": "pass", "evidence": "completed"}'
+
+        plan = CyberdeckPlan("x", "recon", [
+            CyberdeckTask("recon", "cross-check", ["one", "two"], parallel=True)])
+        started = time.perf_counter()
+        execute_plan(plan, tool_runner=runner)
+        self.assertLess(time.perf_counter() - started, 0.22)
 
 
 if __name__ == "__main__":

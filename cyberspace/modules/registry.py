@@ -29,6 +29,9 @@ def discover_and_load() -> dict[str, Module]:
 
     Returns the LOADED_MODULES map {name: Module}.
     """
+    if LOADED_MODULES:
+        return LOADED_MODULES
+
     builtins = [
         "cyberspace.platforms.iceberg.module",
         "cyberspace.platforms.airbender.module",

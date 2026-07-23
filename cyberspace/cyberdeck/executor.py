@@ -9,6 +9,7 @@ captures saved as files the operator can open).
 from __future__ import annotations
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -80,12 +81,14 @@ def execute_plan(plan: CyberdeckPlan, *, tool_runner: Optional[ToolRunner] = Non
         on_event("execute", f"running {len(batch)} task(s): "
                             f"{', '.join(t.stage for _, t in batch)}")
         if len(batch) == 1:
-            res = _run_task(batch[0][0], batch[0][1], tool_runner, results, on_event)
+            res = _run_task(batch[0][0], batch[0][1], tool_runner, results, on_event,
+                            intent=plan.intent)
             results.append(res)
             done_indices.add(batch[0][0])
         else:
             with ThreadPoolExecutor(max_workers=len(batch)) as pool:
-                futures = {pool.submit(_run_task, idx, task, tool_runner, results, on_event): idx
+                futures = {pool.submit(_run_task, idx, task, tool_runner, results, on_event,
+                                       intent=plan.intent): idx
                            for idx, task in batch}
                 for fut in as_completed(futures):
                     idx = futures[fut]
@@ -97,7 +100,7 @@ def execute_plan(plan: CyberdeckPlan, *, tool_runner: Optional[ToolRunner] = Non
 
 
 def _run_task(task_index: int, task: CyberdeckTask, tool_runner: ToolRunner,
-              prior: list[TaskResult], on_event) -> TaskResult:
+              prior: list[TaskResult], on_event, *, intent: str = "") -> TaskResult:
     """Run every tool named for a task and merge outputs into one result.
 
     Success is measured against criteria (not just 'ran without error'): after
@@ -105,30 +108,41 @@ def _run_task(task_index: int, task: CyberdeckTask, tool_runner: ToolRunner,
     against the combined output. A task is only 'ok' if no criterion FAILED.
     """
     from . import criteria as crit_mod
+    started = time.perf_counter()
     context = _prior_context(task, prior)
     outputs, artifacts, errors, crit_results = [], [], [], []
-    for tool in task.tools:
+
+    def run_one(tool):
         on_event("tool", f"{task.stage}: {tool}")
         try:
-            args = {"task": task.description, "context": context}
-            out = tool_runner(tool, args)
-            outs = str(out)
-            outputs.append(f"### {tool}\n{outs}")
-            from ..success import assess_tool_output
-            status, reason = assess_tool_output(outs)
-            empirical = crit_mod.evaluate_tool(
-                tool, outs, stage=task.stage, description=task.description)
-            # Prefer tool-specific empirical graders. The generic runtime grader is
-            # only decisive for hard errors or tools without a specific grader.
-            if status == "fail" or not empirical:
-                crit_results.append(crit_mod.CriterionResult(
-                    f"{tool}.contract_evidence", status, reason, outs[:200]))
-            crit_results.extend(empirical)
-            arts = _extract_artifacts(outs, task, tool=tool)
-            artifacts.extend(arts)
+            args = {"task": task.description, "context": context, "intent": intent}
+            return tool, str(tool_runner(tool, args)), None
         except Exception as e:
-            errors.append(f"{tool}: {e}")
-            outputs.append(f"### {tool}\nERROR: {e}")
+            return tool, f"ERROR: {e}", str(e)
+
+    if task.parallel and len(task.tools) > 1:
+        with ThreadPoolExecutor(max_workers=len(task.tools)) as pool:
+            futures = [pool.submit(run_one, tool) for tool in task.tools]
+            completed = {tool: (out, error) for tool, out, error in
+                         (future.result() for future in futures)}
+        tool_results = [(tool, *completed[tool]) for tool in task.tools]
+    else:
+        tool_results = [run_one(tool) for tool in task.tools]
+
+    for tool, outs, error in tool_results:
+        outputs.append(f"### {tool}\n{outs}")
+        if error:
+            errors.append(f"{tool}: {error}")
+            continue
+        from ..success import assess_tool_output
+        status, reason = assess_tool_output(outs)
+        empirical = crit_mod.evaluate_tool(
+            tool, outs, stage=task.stage, description=task.description)
+        if status == "fail" or not empirical:
+            crit_results.append(crit_mod.CriterionResult(
+                f"{tool}.contract_evidence", status, reason, outs[:200]))
+        crit_results.extend(empirical)
+        artifacts.extend(_extract_artifacts(outs, task, tool=tool))
     output = "\n\n".join(outputs)
     # Evaluate success criteria (platform-wide). This is what makes the Cyberdeck
     # "remember and execute" real success rather than mere absence of errors.
@@ -139,6 +153,7 @@ def _run_task(task_index: int, task: CyberdeckTask, tool_runner: ToolRunner,
         note = ("; ".join(errors) + (" | criteria: " + note if crit_results else "")).strip()
     for r in crit_results:
         on_event("criteria", f"{r.criterion_id}: {r.status} - {r.reason}")
+    on_event("timing", f"{task.stage} task completed in {time.perf_counter() - started:.2f}s")
     return TaskResult(
         task_index=task_index, stage=task.stage, description=task.description, tools=task.tools,
         output=output, artifacts=artifacts, ok=ok, error="; ".join(errors),
@@ -232,6 +247,7 @@ def _live_tool_runner(tool: str, args: dict) -> str:
     from ..modules.base import TOOL_REGISTRY
     context = args.get("context", "")
     desc = args.get("task", "")
+    intent = args.get("intent", "")
     # shadowdragon.kali_run::xxx -> generic registered Kali runner.
     if tool.startswith("shadowdragon.kali_run::"):
         binary = tool.split("::", 1)[1]
@@ -247,15 +263,21 @@ def _live_tool_runner(tool: str, args: dict) -> str:
     # platform.tool style -> call the registered tool with the task description
     t = TOOL_REGISTRY.get(tool)
     if t:
-        # Best-effort: pass the task as a natural-language request most tools accept.
-        try:
-            return str(t.fn(request=desc))
-        except TypeError:
-            try:
-                return str(t.fn(desc))
-            except TypeError:
-                return str(t.fn())
+        return str(t.fn(**_tool_arguments(tool, t.parameters, intent, desc)))
     return f"(tool '{tool}' not found in registry)"
+
+
+def _tool_arguments(tool: str, schema: dict, intent: str, description: str) -> dict:
+    """Compatibility wrapper around the platform-wide schema compiler."""
+    from ..modules.base import Tool
+    from ..tooling import compile_tool_call
+    registered = Tool(tool, tool, schema, lambda **_: None)
+    if tool == "airbender.chain":
+        compiled = compile_tool_call(registered, {"pipeline": "local-discovery"},
+                                     intent or description)
+    else:
+        compiled = compile_tool_call(registered, {}, intent or description)
+    return compiled.arguments
 
 
 def compile_report(intent: str, plan: CyberdeckPlan, results: list[TaskResult]) -> str:

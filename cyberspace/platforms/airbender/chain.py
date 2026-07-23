@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import shlex
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ...host import is_available, missing_hint, run
 from .._common import clean_target, clean_value
@@ -141,6 +142,10 @@ CHAIN_STEPS = {
     "nmap-top": {"desc": "scan top 1000 ports on hosts",
                  "fn": lambda t, **k: _tool_nmap(target=t, args="--top-ports 1000 -T4", timeout=600),
                  "output": "raw"},
+    "quick-services": {"desc": "bounded top-100 port and service scan",
+                       "fn": lambda t, **k: _tool_nmap(
+                           target=t, args="-sV --top-ports 100 -T4 -n", timeout=300),
+                       "output": "raw"},
     "service-detect": {"desc": "service/version detection",
                        "fn": lambda t, **k: _tool_nmap(target=t, args="-sV -T4", timeout=600),
                        "output": "raw"},
@@ -166,6 +171,7 @@ def run_chain(steps: list[str], target: str, on_event=None) -> dict:
         if not step:
             msg = f"unknown step '{step_name}'. Available: {', '.join(CHAIN_STEPS)}"
             on_event("error", msg); results[step_name] = msg; break
+        started = time.perf_counter()
         on_event(step_name, f"running {step_name} on {current}...")
         try:
             raw = step["fn"](current)
@@ -173,7 +179,7 @@ def run_chain(steps: list[str], target: str, on_event=None) -> dict:
             raw = f"ERROR: {e}"
         results[step_name] = raw[:2000]
         record("airbender", step_name, {"target": current}, raw[:300])
-        on_event(step_name, f"done ({len(raw)} chars)")
+        on_event(step_name, f"done in {time.perf_counter() - started:.2f}s ({len(raw)} chars)")
         if step["output"] == "hosts" and step.get("parse"):
             hosts = step["parse"](raw)
             if hosts:
@@ -186,8 +192,8 @@ def run_chain(steps: list[str], target: str, on_event=None) -> dict:
 
 # Predefined pipelines (user-friendly shortcuts).
 PIPELINES = {
-    "local-recon": {"desc": "fast cross-checked LAN discovery -> top ports -> services",
-                    "steps": ["local-discovery", "nmap-top", "service-detect"]},
+    "local-recon": {"desc": "fast cross-checked LAN discovery -> bounded service scan",
+                    "steps": ["local-discovery", "quick-services"]},
     "recon": {"desc": "full recon: discover hosts -> scan ports -> detect services",
               "steps": ["ping-sweep", "nmap-top", "service-detect"]},
     "fast-scan": {"desc": "quick: discover hosts -> masscan all ports",

@@ -68,14 +68,15 @@ def _parse_json(text: str):
         return []
 
 
-def plan(intent: str, *, max_tasks: int = 6) -> CyberdeckPlan:
+def plan(intent: str, *, max_tasks: int = 6, use_ai: bool = False) -> CyberdeckPlan:
     """Build a multi-tool Kill Chain plan for a request.
 
-    Uses the AI provider to decompose the objective when configured; otherwise
-    uses the deterministic heuristic planner.
+    Uses the deterministic planner by default so execution never waits for a
+    provider merely to select a known tool. AI decomposition remains available
+    explicitly for callers that want an open-ended plan.
     """
     detected = detect_stage(intent)
-    provider = _provider()
+    provider = _provider() if use_ai else None
     if provider is not None:
         ai_tasks = _ai_plan(provider, intent, detected)
         if ai_tasks:
@@ -158,23 +159,19 @@ def heuristic_plan(intent: str, detected: str, *, max_tasks: int = 5) -> Cyberde
     tasks: list[CyberdeckTask] = []
 
     if any(k in text for k in ("device", "host", "network", "subnet", "who is on", "find devices")):
-        # Recon: multiple independent discovery methods, then packet capture.
+        # A device inventory is discovery, not a full port/service/capture job.
+        # local-discovery cross-checks installed probes concurrently without the
+        # overlapping ping-sweep + nmap + full chain formerly scheduled here.
         tasks.append(CyberdeckTask(
             stage="recon",
-            description="Discover live devices and open services using independent methods.",
-            tools=["airbender.ping_sweep", "airbender.nmap", "airbender.chain"],
+            description="Discover live devices using installed local-network probes.",
+            tools=["airbender.chain"],
             parallel=True))
         tasks.append(CyberdeckTask(
-            stage="recon",
-            description=("For each discovered device, capture and inspect packets so the "
-                        "operator can view traffic in a readable form (links to .pcap files)."),
-            tools=["shadowdragon.kali_run::tshark", "shadowdragon.kali_run::tcpdump"],
-            depends_on=[0], parallel=True))
-        tasks.append(CyberdeckTask(
             stage="objectives",
-            description="Compile a device inventory with packet-capture links into one report.",
+            description="Compile the discovered device inventory into one report.",
             tools=["cyberdeck.report"],
-            depends_on=[1], parallel=False))
+            depends_on=[0], parallel=False))
 
     elif any(k in text for k in ("web", "website", "url", "app", "sql", "login")):
         tasks.append(CyberdeckTask(

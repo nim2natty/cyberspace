@@ -90,7 +90,11 @@ def build_system_prompt(base: str = "") -> str:
     try:
         from ..memory import context_block
         from ..projects import get_active, search as project_search
-        prompt = (base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL + context_block()
+        from ..host import runtime_summary
+        prompt = ((base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL +
+                  "\n\n## Execution environment\n" + runtime_summary() +
+                  " Host tools execute in this stated environment; never claim Cyberspace is "
+                  "sandboxed or containerized unless this runtime fact says so." + context_block())
         from ..projects import context_block as project_context
         prompt += project_context()
         # Surface Cyberdeck and its verified playbook so the
@@ -148,6 +152,7 @@ class Agent:
                        "Calls outside this platform are denied by the runtime.")
         self.messages: list[dict] = [{"role": "system", "content": system}]
         self.max_iterations = 12
+        self.current_prompt = ""
 
     @property
     def tools(self) -> list[Tool]:
@@ -161,14 +166,16 @@ class Agent:
             tool = next((candidate for candidate in _project_tools() if candidate.name == call.name), None)
         if not tool:
             return f"ERROR: tool '{call.name}' not found."
-        self.console.print(f"   [dim]calling[/dim] [cyan]{call.name}[/cyan]({call.arguments})")
         try:
-            result = tool.fn(**call.arguments)
+            from ..tooling import compile_tool_call
+            compiled = compile_tool_call(tool, call.arguments, self.current_prompt)
+            self.console.print(f"   [dim]compiled[/dim] {compiled.preview()}")
+            result = tool.fn(**compiled.arguments)
             # Record this action in memory for personalization across sessions.
             try:
                 from ..memory import record
                 record(platform=call.name.split(".")[0], action=call.name,
-                       args=call.arguments, result_summary=str(result)[:300])
+                       args=compiled.arguments, result_summary=str(result)[:300])
             except Exception:
                 pass
             status, reason = assess_tool_output(result)
@@ -183,6 +190,7 @@ class Agent:
         """One user turn. Runs the tool loop until the LLM gives a final answer."""
         from ..cyberdeck.prompts import record_prompt, complete_prompt
         prompt_record = record_prompt(prompt, source=self.scope)
+        self.current_prompt = prompt
         # Project selection can change between turns; refresh its scoped memory.
         self.messages[0]["content"] = build_system_prompt(self.cfg.system_prompt or DEFAULT_SYSTEM)
         self.messages.append({"role": "user", "content": prompt})
