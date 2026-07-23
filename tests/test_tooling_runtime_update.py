@@ -92,6 +92,7 @@ def test_runtime_reports_native_or_container_fact():
 
 
 def test_elevation_requires_confirmation_and_only_wraps_allowlist(monkeypatch):
+    import os
     import cyberspace.host as host
 
     host.disable_elevation()
@@ -101,6 +102,9 @@ def test_elevation_requires_confirmation_and_only_wraps_allowlist(monkeypatch):
     monkeypatch.setattr(host, "is_available", lambda name: name == "sudo")
     monkeypatch.setattr(host, "which", lambda name: f"/usr/bin/{name}")
     ok, message = host.enable_elevation(confirm=None)
+    if os.name == "nt":
+        assert not ok and "Run as administrator" in message
+        return
     assert not ok and "confirmation" in message
     ok, _ = host.enable_elevation(confirm=lambda prompt: True, runner=lambda argv: 0)
     assert ok
@@ -142,7 +146,8 @@ def test_source_update_fast_forwards_and_refreshes_environment(tmp_path):
     from cyberspace.updater import update_latest
     (tmp_path / ".git").mkdir()
     (tmp_path / "pyproject.toml").write_text("[project]\n")
-    python = tmp_path / ".venv" / "bin" / "python"
+    import os
+    python = tmp_path / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     python.parent.mkdir(parents=True)
     python.write_text("")
     commands = []

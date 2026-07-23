@@ -19,4 +19,4 @@ OSCP study, authorized engagements). Use only against systems you own or are
 explicitly authorized to test.
 """
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
