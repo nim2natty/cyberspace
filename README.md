@@ -87,8 +87,6 @@ GitHub release, verifies its SHA-256 checksum, and adds `cyberspace` to your use
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
-open a new terminal and use the shorter `cyberspace` command.
-
 ### Windows (PowerShell)
 
 ```powershell
