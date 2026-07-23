@@ -87,17 +87,7 @@ GitHub release, verifies its SHA-256 checksum, and adds `cyberspace` to your use
 curl -fsSL https://raw.githubusercontent.com/nim2natty/cyberspace/main/installer/install.sh | bash
 ```
 
-No additional installation step is required. The curl command installs the verified
-executable at `~/.local/bin/cyberspace`. Because a downloaded script cannot change the
-current parent shell's PATH, either run it immediately by its full path:
-
-```bash
-~/.local/bin/cyberspace setup
-~/.local/bin/cyberspace doctor
-~/.local/bin/cyberspace
-```
-
-or open a new terminal and use the shorter `cyberspace` command.
+open a new terminal and use the shorter `cyberspace` command.
 
 ### Windows (PowerShell)
 
