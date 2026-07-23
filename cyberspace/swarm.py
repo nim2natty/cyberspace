@@ -27,6 +27,7 @@ from rich.console import Console
 from .modules.base import TOOL_REGISTRY, Tool
 from .agent.llm import LLMConfig, get_provider, ProviderError, chat_with_failover
 from .agent.core import build_system_prompt
+from .tooling import BATCH_PLANNING_INSTRUCTIONS
 from .success import assess_tool_output, tool_contract_text
 
 _CONSOLE = Console()
@@ -247,7 +248,6 @@ class Swarm:
         self.console = console or _CONSOLE
         self.ghost_mode = ghost_mode
         self.messages = [{"role": "system", "content": build_system_prompt(WORKFLOW_SYSTEM)}]
-        self.max_iterations = 20
         self.provider = get_provider(cfg)
         self.agent_logs = {s.name: [] for s in KILL_CHAIN}
         self.current_stage = ""
@@ -282,57 +282,38 @@ class Swarm:
             f"Complete this {spec.display} task in scope; return substantive evidence, "
             "explicitly label pass/fail/uncertain, and disclose errors or untested items.")
         delegated = (f"<task>{task}</task>\n<success_criteria>{criteria}</success_criteria>\n"
-                     "Verify every criterion against tool evidence before reporting completion.")
-        messages = [{"role": "system", "content": build_system_prompt(spec.system_prompt)},
+                     "Return the complete precise command list in this response. Select the "
+                     "smallest bounded set that directly produces the requested information.")
+        messages = [{"role": "system", "content": build_system_prompt(
+                        spec.system_prompt + "\n\n" + BATCH_PLANNING_INSTRUCTIONS)},
                     {"role": "user", "content": delegated}]
         try:
             resp = chat_with_failover(self.provider, messages, tools, self.console)
         except ProviderError as e:
             self.console.print(f"  [red]{spec.display} error: {e}[/red]")
             return f"STAGE ERROR ({spec.display}): {e}"
-        result = resp.text
-        # Run any tool calls the stage specialist requests.
-        for _ in range(6):
-            if not resp.tool_calls:
-                break
-            messages.append(self._assistant_msg(resp))
-            for call in resp.tool_calls:
-                self.console.print(
-                    f"  [dim]{spec.emoji} {spec.display} -> calling[/dim] [cyan]{call.name}[/cyan]")
-                tool = TOOL_REGISTRY.get(call.name)
-                if tool:
-                    try:
-                        from .tooling import compile_tool_call
-                        compiled = compile_tool_call(tool, call.arguments, task)
-                        self.console.print(f"  [dim]compiled {compiled.preview()}[/dim]")
-                        out = str(tool.fn(**compiled.arguments))
-                        from .memory import record
-                        record(spec.name, call.name, compiled.arguments, out[:300])
-                    except Exception as e:
-                        out = f"ERROR: {e}"
-                else:
-                    out = f"ERROR: tool '{call.name}' not found."
-                if tool:
-                    status, reason = assess_tool_output(out)
-                    out += (f"\n\n[RUNTIME CHECK: {status.upper()} - {reason}]\n" +
-                            tool_contract_text(tool.name, tool.success_criteria,
-                                               tool.verification))
-                self.console.print(f"  [dim]↳ {call.name} returned {len(out)} characters[/dim]")
-                messages.append({"role": "tool", "name": call.name,
-                                 "tool_call_id": call.id, "content": out})
-            try:
-                resp = chat_with_failover(self.provider, messages, tools, self.console)
-            except ProviderError as e:
-                self.console.print(f"  [red]{spec.display} error: {e}[/red]")
-                return f"STAGE ERROR ({spec.display}): {e}"
-            result = resp.text or result
-        verified, result = _verified_stage_result(result, criteria)
+        if resp.tool_calls:
+            from .tooling import execute_tool_batch
+            from .cyberdeck.criteria import evaluate_stage
+            def record_command(command, output):
+                from .memory import record
+                record(spec.name, command.tool, command.arguments, output[:300])
+            result, executions = execute_tool_batch(
+                resp.tool_calls, tools, task, console=self.console, stage=spec.name,
+                recorder=record_command)
+            stage_results = evaluate_stage(
+                spec.name, "\n\n".join(row.evidence for row in executions))
+            verified = (bool(executions) and all(row.status == "pass" for row in executions)
+                        and bool(stage_results)
+                        and all(row.status == "pass" for row in stage_results))
+        else:
+            verified, result = _verified_stage_result(resp.text, criteria)
         self.agent_logs[spec.name].append(f"Task: {task}\nResult: {result[:500]}")
         state = "verified" if verified else "uncertain"
         self.console.print(f"  [dim]{spec.emoji} {spec.display} {state}[/dim]\n")
         # Record this stage's outcome in Actions on Objectives memory.
         self._record_objective(spec, task, result)
-        return result[:4000]
+        return result
 
     def _record_objective(self, spec: KillChainStage, task: str, result: str) -> None:
         """Save every kill-chain action as cross-referenceable objective memory."""
@@ -345,7 +326,7 @@ class Swarm:
             pass
 
     def ask(self, prompt: str) -> str:
-        """One user turn through the Cyber Kill Chain."""
+        """Route once, plan once in the scoped stage, then execute a command batch."""
         from .cyberdeck.prompts import record_prompt, complete_prompt
         prompt_record = record_prompt(
             prompt, source="swarm-ghost" if self.ghost_mode else "swarm")
@@ -357,60 +338,20 @@ class Swarm:
         if spec:
             self.console.print(f"\n  [bold magenta]>> Kill Chain stage detected: "
                                f"{spec.emoji} {spec.display} (phase {spec.phase})[/bold magenta]\n")
-        self.messages.append({"role": "user", "content": prompt})
         # Record prompt as Actions on Objectives memory.
         if not self.ghost_mode:
             self._save_objective_prompt(prompt)
-        dt = self._delegate_tool()
-        from .agent.core import _project_tools
-        all_tools = [dt] + _project_tools()
-        for _ in range(self.max_iterations):
-            try:
-                resp = chat_with_failover(self.provider, self.messages, all_tools, self.console)
-            except Exception as exc:
-                complete_prompt(prompt_record["sequence"], str(exc), status="failed")
-                raise
-            self.messages.append(self._assistant_msg(resp))
-            if not resp.tool_calls:
-                self.console.print()
-                self.console.print(f"[green]cyberspace [{spec.display if spec else 'Kill Chain'}]>[/green] {resp.text}")
-                self._save_to_project(prompt, resp.text)
-                complete_prompt(prompt_record["sequence"], resp.text)
-                return resp.text
-            for call in resp.tool_calls:
-                selected = next((tool for tool in all_tools if tool.name == call.name), None)
-                if selected:
-                    try:
-                        from .tooling import compile_tool_call
-                        compiled = compile_tool_call(selected, call.arguments, prompt)
-                        call.arguments = compiled.arguments
-                        self.console.print(f"  [dim]compiled {compiled.preview()}[/dim]")
-                    except Exception as exc:
-                        result = f"ERROR: {exc}"
-                        self.messages.append({"role": "tool", "name": call.name,
-                                              "tool_call_id": call.id, "content": result})
-                        continue
-                if call.name == "swarm.delegate":
-                    result = self.delegate(call.arguments.get("agent_name", ""),
-                                           call.arguments.get("task", ""),
-                                           call.arguments.get("success_criteria", ""))
-                elif call.name == "project.search":
-                    from .agent.core import _project_search
-                    result = _project_search(call.arguments.get("query", ""))
-                elif call.name == "project.open":
-                    from .agent.core import _project_open
-                    result = _project_open(call.arguments.get("query", ""))
-                elif call.name == "project.create":
-                    from .agent.core import _project_create
-                    result = _project_create(call.arguments.get("name", ""),
-                                             call.arguments.get("description", ""))
-                else:
-                    result = "ERROR: workflow can only use swarm.delegate + project tools"
-                self.messages.append({"role": "tool", "name": call.name,
-                                      "tool_call_id": call.id, "content": result})
-        self.console.print("[yellow](Cyber Kill Chain reached its step limit)[/yellow]")
-        complete_prompt(prompt_record["sequence"], "", status="incomplete")
-        return ""
+        try:
+            response = self.delegate(stage, prompt)
+        except Exception as exc:
+            complete_prompt(prompt_record["sequence"], str(exc), status="failed")
+            raise
+        self.console.print()
+        self.console.print(
+            f"[green]cyberspace [{spec.display if spec else 'Kill Chain'}]>[/green] {response}")
+        self._save_to_project(prompt, response)
+        complete_prompt(prompt_record["sequence"], response)
+        return response
 
     @staticmethod
     def _assistant_msg(resp) -> dict:

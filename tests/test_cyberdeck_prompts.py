@@ -83,11 +83,12 @@ def test_agent_and_swarm_attach_responses(monkeypatch, tmp_path):
     monkeypatch.setattr(swarm, "chat_with_failover",
                         lambda *args, **kwargs: AgentResponse(text="swarm response"))
     worker = swarm.Swarm(LLMConfig(), ghost_mode=True)
-    assert worker.ask("write up the findings") == "swarm response"
+    assert worker.ask("write up the findings").startswith("STAGE UNCERTAIN")
 
     rows = prompts.list_prompts()
     assert [row["source"] for row in rows] == ["agent", "swarm-ghost"]
-    assert [row["response"] for row in rows] == ["agent response", "swarm response"]
+    assert rows[0]["response"] == "agent response"
+    assert rows[1]["response"].startswith("STAGE UNCERTAIN")
 
 
 def test_existing_project_and_swarm_prompts_migrate_once_in_timestamp_order(monkeypatch, tmp_path):

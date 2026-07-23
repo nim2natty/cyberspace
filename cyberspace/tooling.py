@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Iterable
 
 from .modules.base import Tool
 
@@ -23,6 +25,29 @@ class CompiledToolCall:
     def preview(self) -> str:
         return (f"category={self.platform}/{self.stage} tool={self.tool} "
                 f"arguments={json.dumps(self.arguments, sort_keys=True, default=str)}")
+
+
+@dataclass(frozen=True)
+class ToolExecution:
+    command: CompiledToolCall
+    status: str
+    reason: str
+    evidence: str
+    elapsed: float
+    success_criteria: tuple[str, ...]
+    verification: str
+
+
+BATCH_PLANNING_INSTRUCTIONS = """
+## Fast command planning
+For an actionable request, plan the complete bounded operation in ONE response. Return
+all independent tool calls together (maximum 6), with exact schema-valid arguments.
+Choose the smallest set of tools that answers the requested information; avoid duplicate,
+exhaustive, or unrelated operations. Do not call one tool and wait before selecting the
+rest. Cyberspace will show the command list, execute independent calls concurrently, and
+grade their evidence against each tool's success contract. For a non-actionable question,
+answer directly without a tool call.
+""".strip()
 
 
 _URL = re.compile(r"https?://[^\s]+", re.I)
@@ -59,6 +84,120 @@ def compile_tool_call(tool: Tool, arguments: dict | None, prompt: str = "") -> C
     platform = tool.module or tool.name.partition(".")[0]
     stage = _tool_stage(tool.name)
     return CompiledToolCall(tool.name, platform, stage, values)
+
+
+def execute_tool_batch(calls: Iterable, tools: Iterable[Tool], prompt: str, *,
+                       console=None, stage: str = "", max_workers: int = 6,
+                       recorder: Callable | None = None) -> tuple[str, list[ToolExecution]]:
+    """Compile an entire command list, run it concurrently, and grade real evidence."""
+    tool_map = {tool.name: tool for tool in tools}
+    calls = list(calls)
+    if len(calls) > max_workers:
+        return (f"# Command plan — FAIL\n\nNo commands executed: the model proposed "
+                f"{len(calls)} commands; the bounded maximum is {max_workers}. Narrow the "
+                "objective or select the smallest non-duplicate command set.", [])
+    compiled: list[tuple[Any, Tool, CompiledToolCall]] = []
+    errors = []
+    for index, call in enumerate(calls, 1):
+        tool = tool_map.get(call.name)
+        if not tool:
+            errors.append(f"{index}. {call.name}: tool is unavailable or outside this scope")
+            continue
+        try:
+            command = compile_tool_call(tool, call.arguments, prompt)
+            compiled.append((call, tool, command))
+        except Exception as exc:
+            errors.append(f"{index}. {call.name}: {exc}")
+    if errors:
+        report = ("# Command plan — FAIL\n\nNo commands executed because the plan was not "
+                  "fully precise and in scope.\n" + "\n".join(f"- {error}" for error in errors))
+        return report, []
+
+    if console:
+        console.print(f"\n[bold cyan]Command plan ({len(compiled)})[/bold cyan]")
+        for index, (_, _, command) in enumerate(compiled, 1):
+            console.print(f"  [cyan]{index}.[/cyan] {command.preview()}")
+
+    def run_one(item):
+        _call, tool, command = item
+        started = time.perf_counter()
+        try:
+            output = str(tool.fn(**command.arguments))
+        except Exception as exc:
+            output = f"ERROR executing {tool.name}: {exc}"
+        elapsed = time.perf_counter() - started
+        status, reason = _grade_output(tool, output, stage or command.stage, prompt)
+        if recorder:
+            try:
+                recorder(command, output)
+            except Exception:
+                pass
+        return ToolExecution(command, status, reason, output, elapsed,
+                             tuple(tool.success_criteria), tool.verification)
+
+    batch_started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=max(1, len(compiled))) as pool:
+        futures = [pool.submit(run_one, item) for item in compiled]
+        executions = [future.result() for future in futures]
+    report = format_batch_report(
+        executions, stage=stage, elapsed=time.perf_counter() - batch_started)
+    return report, executions
+
+
+def format_batch_report(executions: list[ToolExecution], *, stage: str = "",
+                        elapsed: float = 0.0) -> str:
+    statuses = [row.status for row in executions]
+    stage_results = []
+    if stage:
+        try:
+            from .cyberdeck.criteria import evaluate_stage
+            stage_results = evaluate_stage(stage, "\n\n".join(row.evidence for row in executions))
+        except Exception:
+            stage_results = []
+    statuses.extend(result.status for result in stage_results)
+    overall = "FAIL" if "fail" in statuses else (
+        "UNCERTAIN" if "uncertain" in statuses or not statuses else "PASS")
+    lines = [f"# Command execution — {overall}", "",
+             f"Commands executed: {len(executions)} concurrently in {elapsed:.2f}s", ""]
+    for index, row in enumerate(executions, 1):
+        mark = {"pass": "PASS", "fail": "FAIL"}.get(row.status, "UNCERTAIN")
+        lines.extend([
+            f"## {index}. {row.command.tool} — {mark} ({row.elapsed:.2f}s)",
+            f"**Category:** {row.command.platform}/{row.command.stage}",
+            f"**Arguments:** `{json.dumps(row.command.arguments, sort_keys=True, default=str)}`",
+            "**Success criteria:** " + " | ".join(row.success_criteria),
+            f"**Verification:** {row.verification}",
+            f"**Verdict:** {row.reason}",
+            "**Evidence:**",
+            "```text", row.evidence[:3000] or "(no output)", "```", "",
+        ])
+    if stage_results:
+        lines.extend([f"## Aggregate stage criterion: {stage}", ""])
+        for result in stage_results:
+            lines.append(
+                f"- {result.status.upper()} `{result.criterion_id}`: {result.reason}")
+    return "\n".join(lines).rstrip()
+
+
+def _grade_output(tool: Tool, output: str, stage: str, prompt: str) -> tuple[str, str]:
+    from .success import assess_tool_output
+    runtime_status, runtime_reason = assess_tool_output(output)
+    if runtime_status == "fail":
+        return runtime_status, runtime_reason
+    try:
+        from .cyberdeck.criteria import evaluate_tool
+        empirical = evaluate_tool(tool.name, output, stage=stage, description=prompt)
+    except Exception:
+        empirical = []
+    if empirical:
+        if any(result.status == "fail" for result in empirical):
+            failed = [result.reason for result in empirical if result.status == "fail"]
+            return "fail", "; ".join(failed)
+        if any(result.status != "pass" for result in empirical):
+            uncertain = [result.reason for result in empirical if result.status != "pass"]
+            return "uncertain", "; ".join(uncertain)
+        return "pass", "; ".join(result.reason for result in empirical)
+    return runtime_status, runtime_reason
 
 
 def _coerce(name: str, value: Any, spec: dict) -> Any:

@@ -68,6 +68,13 @@ as the label; otherwise Cyberdeck derives one from the prompt text.
 The CLI shows the Kill Chain stage, delegated work, tool calls, result progress, and
 model failover. Credential, quota, and network failures remain visible.
 
+For actionable Agent and Swarm requests, the model plans the complete bounded command
+list in one response. Cyberspace displays the exact categorized arguments, executes
+independent commands concurrently, and produces an evidence-linked PASS, FAIL, or
+UNCERTAIN verdict for every command. Swarm routes directly to the detected Kill Chain
+stage, avoiding another model call just to choose that stage, and includes the aggregate
+stage criterion in its report.
+
 ## Installation
 
 Cyberspace is distributed as a standalone executable. **Python, pip, cloning, and virtual

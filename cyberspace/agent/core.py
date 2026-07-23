@@ -16,13 +16,14 @@ from rich.console import Console
 
 from ..modules.base import TOOL_REGISTRY, Tool
 from ..success import SUCCESS_PROTOCOL, assess_tool_output, tool_contract_text
+from ..tooling import BATCH_PLANNING_INSTRUCTIONS
 from .llm import AgentResponse, LLMConfig, get_provider, chat_with_failover
 
 DEFAULT_SYSTEM = (
     "You are cyberbot, an agentic assistant for a penetration-testing platform "
     "used for LEGAL security education and authorized assessments only. You help "
     "the operator plan and execute engagements by calling the available tools. "
-    "Always think step by step, call one tool at a time when unsure, and keep "
+    "Plan the complete bounded command list, call independent tools together, and keep "
     "actions within the operator's authorized scope. When you have enough "
     "information, give a concise, structured answer with findings and next steps."
 )
@@ -91,7 +92,8 @@ def build_system_prompt(base: str = "") -> str:
         from ..memory import context_block
         from ..projects import get_active, search as project_search
         from ..host import runtime_summary
-        prompt = ((base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL +
+        prompt = ((base or DEFAULT_SYSTEM) + "\n\n" + SUCCESS_PROTOCOL + "\n\n" +
+                  BATCH_PLANNING_INSTRUCTIONS +
                   "\n\n## Execution environment\n" + runtime_summary() +
                   " Host tools execute in this stated environment; never claim Cyberspace is "
                   "sandboxed or containerized unless this runtime fact says so." + context_block())
@@ -151,7 +153,6 @@ class Agent:
             system += (f"\n\nYou are in strict {scope} AI mode. Only call the supplied {scope} tools. "
                        "Calls outside this platform are denied by the runtime.")
         self.messages: list[dict] = [{"role": "system", "content": system}]
-        self.max_iterations = 12
         self.current_prompt = ""
 
     @property
@@ -187,7 +188,7 @@ class Agent:
             return f"ERROR executing {call.name}: {e}"
 
     def ask(self, prompt: str) -> str:
-        """One user turn. Runs the tool loop until the LLM gives a final answer."""
+        """Plan once, execute the complete command list concurrently, and grade it."""
         from ..cyberdeck.prompts import record_prompt, complete_prompt
         prompt_record = record_prompt(prompt, source=self.scope)
         self.current_prompt = prompt
@@ -195,35 +196,39 @@ class Agent:
         self.messages[0]["content"] = build_system_prompt(self.cfg.system_prompt or DEFAULT_SYSTEM)
         self.messages.append({"role": "user", "content": prompt})
 
-        for _ in range(self.max_iterations):
-            try:
-                resp: AgentResponse = chat_with_failover(
-                    self.provider, self.messages, self.tools, self.console)
-            except Exception as exc:
-                complete_prompt(prompt_record["sequence"], str(exc), status="failed")
-                raise
-            self.messages.append(self._assistant_msg(resp))
-
-            if not resp.tool_calls:
-                self.console.print()
-                self.console.print(f"[green]cyberbot>[/green] {resp.text}")
-                # Save to the active project if one is set.
-                self._save_to_project(prompt, resp.text)
-                complete_prompt(prompt_record["sequence"], resp.text)
-                return resp.text
-
-            for call in resp.tool_calls:
-                result = self._execute(call)
-                self.messages.append({
-                    "role": "tool",
-                    "name": call.name,
-                    "tool_call_id": call.id,
-                    "content": result,
-                })
-
-        self.console.print("[yellow](reached max tool iterations)[/yellow]")
-        complete_prompt(prompt_record["sequence"], "", status="incomplete")
-        return ""
+        try:
+            resp: AgentResponse = chat_with_failover(
+                self.provider, self.messages, self.tools, self.console)
+        except Exception as exc:
+            complete_prompt(prompt_record["sequence"], str(exc), status="failed")
+            raise
+        self.messages.append(self._assistant_msg(resp))
+        if not resp.tool_calls:
+            response = resp.text
+        else:
+            from ..tooling import execute_tool_batch
+            def record_command(command, output):
+                from ..memory import record
+                record(platform=command.platform, action=command.tool,
+                       args=command.arguments, result_summary=output[:300])
+            response, executions = execute_tool_batch(
+                resp.tool_calls, self.tools, prompt, console=self.console,
+                recorder=record_command)
+            if executions:
+                for call, execution in zip(resp.tool_calls, executions):
+                    self.messages.append({"role": "tool", "name": call.name,
+                                          "tool_call_id": call.id,
+                                          "content": execution.evidence})
+            else:
+                # A rejected all-or-nothing batch has no tool result messages;
+                # remove its assistant tool-call message to keep future turns valid.
+                self.messages.pop()
+                self.messages.append({"role": "assistant", "content": response})
+        self.console.print()
+        self.console.print(f"[green]cyberbot>[/green] {response}")
+        self._save_to_project(prompt, response)
+        complete_prompt(prompt_record["sequence"], response)
+        return response
 
     def _save_to_project(self, prompt: str, response: str) -> None:
         """Auto-save this prompt+response to the active project if one is set."""
